@@ -1,8 +1,8 @@
 {
   "importMap": "./import_map.json",
   "tasks": {
-    "start": "deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts",
-    "build": "deno compile --allow-read --allow-run --allow-write --allow-env -o amusic src/amusic.ts"
+    "start": "deno run --allow-read --allow-run --allow-write --allow-env amusic.ts",
+    "build": "deno compile --allow-read --allow-run --allow-write --allow-env -o amusic amusic.ts"
   },
   "lint": {
     "files": {
