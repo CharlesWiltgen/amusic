@@ -1,28 +1,27 @@
 # amusic
 
-`amusic` is a command-line audio utility written in Deno. Its primary function is to process audio files and add AcousticID fingerprints. This allows for music identification and metadata lookup through services like MusicBrainz.
+`amusic` is a command-line music utility for the care and feeding of local music libraries. Initially, it'll be a convenient way to add ReplayGain and AcousticID fingerprints.
 
 ## Features
 
--   Generates AcousticID fingerprints for audio files.
--   Writes fingerprints to file metadata using the `ACOUSTID_FINGERPRINT` tag.
--   Checks for existing AcousticID tags and can be forced to overwrite them.
+- For any files without AcousticID fingerprints, this will add them (using the `ACOUSTID_FINGERPRINT` tag)
+- Optionally, users may force AcousticID fingerprints to be re-calculated and overwritten even for files which have them
 
 ## Dependencies
 
-The following command-line tools must be installed and available in your system's PATH:
+Initially, the following command-line tools must be installed and available in the system's PATH:
 
--   **Deno**: The runtime for the script. Installation instructions can be found at [https://deno.land/](https://deno.land/).
--   **ffmpeg**: Used for writing metadata to audio files.
--   **ffprobe**: Used for reading metadata from audio files.
--   **fpcalc**: Used for generating AcousticID fingerprints.
+- **Deno**: The runtime for the script. Installation instructions can be found at [https://deno.land/](https://deno.land/).
+- **ffmpeg**: Used for writing metadata to audio files.
+- **ffprobe**: Used for reading metadata from audio files.
+- **fpcalc**: Used for generating AcousticID fingerprints.
 
 You can typically install `ffmpeg`, `ffprobe` (which often comes with ffmpeg), and `fpcalc` (often part of a package like `acoustid-tools` or `chromaprint`) using your system's package manager (e.g., apt, brew, yum).
 
 ## Installation
 
-1.  Ensure Deno and the other dependencies (ffmpeg, ffprobe, fpcalc) are installed.
-2.  Clone this repository or download the `amusic.ts` script.
+1. Ensure Deno and the other dependencies (ffmpeg, ffprobe, fpcalc) are installed.
+2. Clone this repository or download the `amusic.ts` script.
 
 ## Usage
 
