@@ -1,6 +1,6 @@
 // amusic.ts
 import { Command } from "https://deno.land/x/cliffy@v1.0.0-rc.4/command/mod.ts";
-import { processAcousticIDTagging } from "./lib/acoustid.ts";
+import { processAcoustIDTagging } from "./lib/acoustid.ts";
 
 /**
  * Checks if a command is available in the system PATH.
@@ -29,3 +29,29 @@ async function ensureCommandExists(command: string): Promise<void> {
 
 // Functions `hasAcousticIDTags`, `generateFingerprint`, `writeAcousticIDFingerprint`,
 // and `processAcousticIDTagging` have been moved to lib/acoustid.ts
+
+if (import.meta.main) {
+  await new Command()
+    .name("amusic")
+    .version("0.1.0")
+    .description("Tag audio files with AcousticID fingerprints.")
+    .option("-f, --force", "Force reprocessing even if tags exist.")
+    .arguments("<files:string...>")
+    .action(async (options, ...files) => {
+      await ensureCommandExists("fpcalc");
+      await ensureCommandExists("ffprobe");
+      await ensureCommandExists("ffmpeg");
+
+      console.log(`Processing ${files.length} file(s)...`);
+      for (const file of files) {
+        try {
+          console.log(`\nProcessing: ${file}`);
+          await processAcoustIDTagging(file, options.force || false);
+        } catch (error) {
+          console.error(`Error processing ${file}: ${error.message}`);
+        }
+      }
+      console.log("\nAll files processed.");
+    })
+    .parse(Deno.args);
+}

@@ -98,7 +98,7 @@ export async function writeAcousticIDFingerprint(filePath: string, fingerprint: 
 /**
  * Core logic for adding AcousticID tags to a single file.
  */
-export async function processAcousticIDTagging(filePath: string, force: boolean): Promise<void> {
+export async function processAcoustIDTagging(filePath: string, force: boolean): Promise<void> {
   console.log(`-> Processing file: ${filePath}`);
 
   try {
