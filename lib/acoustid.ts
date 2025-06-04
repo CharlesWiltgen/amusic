@@ -1,5 +1,6 @@
 // lib/acoustid.ts
-import { parse as parsePath } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { parse as parsePath } from "std/path/mod.ts";
+
 /**
  * Silently checks if the audio file already has AcousticID related tags.
  * Returns true if tags are found, false otherwise.
