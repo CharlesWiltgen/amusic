@@ -1,6 +1,6 @@
 // amusic.ts
 import { Command } from "cliffy/command/mod.ts";
-import { processAcoustIDTagging } from "./lib/acoustid.ts";
+import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 
 /**
  * Checks if a command is available in the system PATH.
@@ -42,11 +42,52 @@ if (import.meta.main) {
       { default: false },
     )
     .option(
+      "--show-tags",
+      "Display existing AcoustID tags for files and exit.",
+    )
+    .option(
+      "--dry-run",
+      "Simulate processing and API lookups but do not write any tags to files.",
+    )
+    .option(
       "--api-key <key:string>",
       "AcoustID API key (required for lookups).",
     )
     .arguments("<files:string...>")
     .action(async (options, ...files) => {
+      // Handle --show-tags
+      if (options.showTags) {
+        if (!options.quiet) {
+          console.log("Displaying existing AcoustID tags:");
+        }
+        for (const file of files) {
+          try {
+            await ensureCommandExists("ffprobe"); // Needed for getAcousticIDTags
+            const tags = await getAcousticIDTags(file);
+            if (tags) {
+              console.log(`\nFile: ${file}`);
+              console.log(
+                `  ACOUSTID_ID: ${tags.ACOUSTID_ID || "Not found"}`,
+              );
+              console.log(
+                `  ACOUSTID_FINGERPRINT: ${
+                  tags.ACOUSTID_FINGERPRINT || "Not found"
+                }`,
+              );
+            } else {
+              console.log(`\nFile: ${file}`);
+              console.log("  No AcoustID tags found.");
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error
+              ? error.message
+              : String(error);
+            console.error(`Error reading tags for ${file}: ${errorMessage}`);
+          }
+        }
+        Deno.exit(0); // Exit after showing tags
+      }
+
       await ensureCommandExists("fpcalc");
       await ensureCommandExists("ffprobe");
       await ensureCommandExists("ffmpeg");
@@ -82,6 +123,7 @@ if (import.meta.main) {
             options.apiKey,
             options.force || false,
             options.quiet || false,
+            options.dryRun || false,
           );
           switch (status) {
             case "processed":
@@ -128,6 +170,9 @@ if (import.meta.main) {
         `Other failures (e.g., file access, fpcalc): ${otherFailures}`,
       );
       console.log("---------------------------");
+      if (options.dryRun) {
+        console.log("\nNOTE: This was a dry run. No files were modified.");
+      }
     })
     .parse(Deno.args);
 }
