@@ -18,16 +18,9 @@ fingerprints.
 
 ### AcousticID Processing Details
 
-Currently, `amusic` focuses on the local generation and embedding of the
-`ACOUSTID_FINGERPRINT`. It does **not** yet:
-
-- Query the AcoustID web service using the generated fingerprint.
-- Retrieve or embed an `ACOUSTID_ID` (the UUID from the AcoustID database).
-- Fetch or embed any other metadata (like track title, artist, album) from the
-  AcoustID database.
-
-Support for querying the AcoustID web service to fetch an `ACOUSTID_ID` and
-related metadata could be a potential future enhancement.
+The script now queries the AcoustID web service using the generated fingerprint and a user-provided API key.
+It retrieves and embeds the `ACOUSTID_ID` (the UUID from the AcoustID database).
+It does NOT yet fetch or embed any other metadata (like track title, artist, album) from the AcoustID database, but this is a potential future enhancement.
 
 ## Dependencies
 
@@ -42,6 +35,8 @@ PATH:
 - **fpcalc**: Used for generating AcousticID fingerprints. This is typically
   provided by the `chromaprint-tools` package (or `libchromaprint-tools` on some
   systems). Older distributions might have it in `acoustid-tools`.
+
+The script actively checks for the presence of `ffmpeg`, `ffprobe`, and `fpcalc` at runtime using its `ensureCommandExists` function. Future work could explore WebAssembly (WASM) or pure JavaScript alternatives for `fpcalc` to minimize external binary dependencies and simplify the setup process for users.
 
 You can usually install these dependencies using your system's package manager.
 For example, on Debian/Ubuntu:
@@ -113,6 +108,15 @@ files successfully processed, skipped, and failed.
    ```bash
    deno run --allow-read --allow-run --allow-write --allow-env amusic.ts --quiet "./path/to/quiet_process.mp3"
    ```
+
+## Future Enhancements
+
+Here are some potential next steps for `amusic`:
+
+- Fetching and embedding richer metadata (e.g., track title, artist, album) from the AcoustID database or other music metadata services.
+- Investigating and potentially integrating a WebAssembly (WASM) or pure JavaScript version of `fpcalc` to reduce reliance on external binary dependencies and simplify user setup.
+- Adding support for other relevant music metadata services or databases.
+- Implementing more advanced batch processing options or developing a library mode for programmatic use.
 
 ## Contributing
 
