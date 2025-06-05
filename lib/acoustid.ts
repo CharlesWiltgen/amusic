@@ -44,7 +44,7 @@ export async function generateFingerprint(filePath: string): Promise<string | nu
   const { code, stdout, stderr } = await command.output();
 
   if (code !== 0) {
-    console.error(`  fpcalc error: ${new TextDecoder().decode(stderr).split("\n")[0]}`);
+    console.error(`  fpcalc error: ${new TextDecoder().decode(stderr)}`);
     return null;
   }
 
@@ -65,48 +65,58 @@ export async function writeAcousticIDFingerprint(filePath: string, fingerprint: 
   // console.log(`  Writing fingerprint to file with ffmpeg...`); // Moved to caller
   const fileMeta = parsePath(filePath);
   const tempDir = await Deno.makeTempDir({ prefix: "amusic_tagging_" });
-  const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
-
-  const command = new Deno.Command("ffmpeg", {
-    args: [
-      "-loglevel", "error",
-      "-i", filePath,
-      "-c", "copy",
-      "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
-      tempFilePath,
-    ],
-    stderr: "piped", // Capture stderr for error messages
-  });
-  const { code, stderr } = await command.output();
-
-  if (code !== 0) {
-    console.error(`  ffmpeg error: ${new TextDecoder().decode(stderr).split("\n")[0]}`);
-    await Deno.remove(tempDir, { recursive: true }).catch(e => console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`));
-    return false;
-  }
-
   try {
-    await Deno.rename(tempFilePath, filePath);
+    const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
+
+    const command = new Deno.Command("ffmpeg", {
+      args: [
+        "-loglevel", "error",
+        "-i", filePath,
+        "-c", "copy",
+        "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
+        tempFilePath,
+      ],
+      stderr: "piped", // Capture stderr for error messages
+    });
+    const { code, stderr } = await command.output();
+
+    if (code !== 0) {
+      console.error(`  ffmpeg error: ${new TextDecoder().decode(stderr)}`);
+      return false;
+    }
+
+    try {
+      await Deno.rename(tempFilePath, filePath);
+      return true;
+    } catch (e) {
+      console.error(`  Error replacing original file with tagged version: ${e.message}`);
+      return false;
+    }
+  } finally {
     await Deno.remove(tempDir, { recursive: true }).catch(e => console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`));
-    return true;
-  } catch (e) {
-    console.error(`  Error replacing original file with tagged version: ${e.message}`);
-    await Deno.remove(tempDir, { recursive: true }).catch(e => console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`));
-    return false;
   }
 }
 
 /**
- * Core logic for adding AcousticID tags to a single file.
+ * Represents the status of processing a single file.
  */
-export async function processAcoustIDTagging(filePath: string, force: boolean): Promise<void> {
-  console.log(`-> Processing file: ${filePath}`);
+export type ProcessResultStatus = "processed" | "skipped" | "failed";
+
+/**
+ * Core logic for adding AcousticID tags to a single file.
+ * @param filePath The path to the audio file.
+ * @param force Whether to overwrite existing tags.
+ * @param quiet Whether to suppress informational console logs.
+ * @returns A status indicating the outcome of the processing.
+ */
+export async function processAcoustIDTagging(filePath: string, force: boolean, quiet: boolean): Promise<ProcessResultStatus> {
+  if (!quiet) console.log(`-> Processing file: ${filePath}`);
 
   try {
     const fileInfo = await Deno.stat(filePath);
     if (!fileInfo.isFile) {
       console.error(`Error: Path "${filePath}" is not a file.`);
-      return;
+      return "failed";
     }
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {
@@ -114,36 +124,40 @@ export async function processAcoustIDTagging(filePath: string, force: boolean): 
     } else {
       console.error(`Error accessing file "${filePath}": ${e.message}`);
     }
-    return;
+    return "failed";
   }
 
-  console.log("  Checking for existing AcoustID tags...");
+  if (!quiet) console.log("  Checking for existing AcoustID tags...");
   const tagsExist = await hasAcousticIDTags(filePath);
 
   if (tagsExist && !force) {
-    console.log("  INFO: File already has AcoustID tags. Skipping (use --force to overwrite).");
-    return;
+    if (!quiet) console.log("  INFO: File already has AcoustID tags. Skipping (use --force to overwrite).");
+    return "skipped";
   }
 
   if (tagsExist && force) {
-    console.log("  INFO: File already has AcoustID tags. --force option provided, proceeding to overwrite.");
+    if (!quiet) console.log("  INFO: File already has AcoustID tags. --force option provided, proceeding to overwrite.");
   }
 
-  console.log("  ACTION: Generating AcoustID fingerprint...");
+  if (!quiet) console.log("  ACTION: Generating AcoustID fingerprint...");
   const fingerprint = await generateFingerprint(filePath);
 
   if (!fingerprint) {
-    console.log("  WARNING: Could not generate fingerprint. Skipping.");
-    return;
+    // generateFingerprint already logs errors to console.error
+    if (!quiet) console.log("  WARNING: Could not generate fingerprint. Skipping.");
+    return "failed";
   }
-  console.log(`    Generated Fingerprint: ${fingerprint.substring(0, 30)}...`);
+  if (!quiet) console.log(`    Generated Fingerprint: ${fingerprint.substring(0, 30)}...`);
 
-  console.log("  ACTION: Writing ACOUSTID_FINGERPRINT tag...");
+  if (!quiet) console.log("  ACTION: Writing ACOUSTID_FINGERPRINT tag...");
   const success = await writeAcousticIDFingerprint(filePath, fingerprint);
 
   if (success) {
-    console.log("  SUCCESS: AcoustID fingerprint tag processed.");
+    if (!quiet) console.log("  SUCCESS: AcoustID fingerprint tag processed.");
+    return "processed";
   } else {
-    console.log("  ERROR: Failed to process AcoustID fingerprint tag.");
+    // writeAcousticIDFingerprint already logs errors to console.error
+    if (!quiet) console.log("  ERROR: Failed to process AcoustID fingerprint tag.");
+    return "failed";
   }
 }

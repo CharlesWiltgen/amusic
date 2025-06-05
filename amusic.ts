@@ -36,22 +36,54 @@ if (import.meta.main) {
     .version("0.1.0")
     .description("Tag audio files with AcousticID fingerprints.")
     .option("-f, --force", "Force reprocessing even if tags exist.")
+    .option("-q, --quiet", "Suppress informational output. Errors are still shown.", { default: false })
     .arguments("<files:string...>")
     .action(async (options, ...files) => {
       await ensureCommandExists("fpcalc");
       await ensureCommandExists("ffprobe");
       await ensureCommandExists("ffmpeg");
 
-      console.log(`Processing ${files.length} file(s)...`);
+      if (!options.quiet) {
+        console.log(`Processing ${files.length} file(s)...`);
+      }
+
+      let processedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+
       for (const file of files) {
         try {
-          console.log(`\nProcessing: ${file}`);
-          await processAcoustIDTagging(file, options.force || false);
+          // The per-file header "Processing: ${file}" is now handled by processAcoustIDTagging (if not quiet)
+          // If quiet, processAcoustIDTagging will not print it.
+          // Adding a newline if not quiet for better separation if processAcoustIDTagging prints its header.
+          if (!options.quiet && files.length > 1) console.log(""); // Add space between file logs
+
+          const status = await processAcoustIDTagging(file, options.force || false, options.quiet || false);
+          switch (status) {
+            case "processed":
+              processedCount++;
+              break;
+            case "skipped":
+              skippedCount++;
+              break;
+            case "failed":
+              failedCount++;
+              break;
+          }
         } catch (error) {
-          console.error(`Error processing ${file}: ${error.message}`);
+          // This catch block might be redundant if processAcoustIDTagging handles all its errors
+          // and returns "failed". However, keeping it for unexpected errors.
+          console.error(`Unexpected error processing ${file}: ${error.message}`);
+          failedCount++;
         }
       }
-      console.log("\nAll files processed.");
+
+      // Print Summary Report
+      console.log("\n--- Processing Complete ---");
+      console.log(`Successfully processed: ${processedCount}`);
+      console.log(`Skipped: ${skippedCount}`);
+      console.log(`Failed: ${failedCount}`);
+      console.log("---------------------------");
     })
     .parse(Deno.args);
 }
