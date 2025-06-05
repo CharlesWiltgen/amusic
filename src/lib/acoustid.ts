@@ -38,6 +38,60 @@ export async function hasAcousticIDTags(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Retrieves existing ACOUSTID_FINGERPRINT and ACOUSTID_ID tags from a file.
+ * Returns an object with the tags or null if not found or an error occurs.
+ */
+export async function getAcousticIDTags(
+  filePath: string,
+): Promise<{ ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } | null> {
+  const command = new Deno.Command("ffprobe", {
+    args: [
+      "-v",
+      "quiet",
+      "-show_entries",
+      "format_tags=ACOUSTID_FINGERPRINT,ACOUSTID_ID",
+      "-of",
+      "default=noprint_wrappers=1", // Output format: key=value
+      filePath,
+    ],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout, stderr } = await command.output();
+
+  if (code !== 0) {
+    const errorOutput = new TextDecoder().decode(stderr).trim();
+    if (
+      errorOutput && !errorOutput.includes("does not contain any stream") &&
+      !errorOutput.includes("Invalid argument") // Common if tags section is empty
+    ) {
+      // console.warn(`  ffprobe check warning for ${filePath}: ${errorOutput.split("\n")[0]}`);
+    }
+    return null; // Error or no tags found
+  }
+
+  const outputText = new TextDecoder().decode(stdout).trim();
+  if (!outputText) {
+    return null; // No tags found
+  }
+
+  const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
+  outputText.split("\n").forEach((line) => {
+    const [key, value] = line.split("=");
+    if (key === "TAG:ACOUSTID_FINGERPRINT") {
+      tags.ACOUSTID_FINGERPRINT = value;
+    } else if (key === "TAG:ACOUSTID_ID") {
+      tags.ACOUSTID_ID = value;
+    }
+  });
+
+  if (Object.keys(tags).length === 0) {
+    return null; // No relevant tags found
+  }
+  return tags;
+}
+
+/**
  * Generates the AcousticID fingerprint using fpcalc.
  */
 export async function generateFingerprint(
@@ -190,6 +244,7 @@ export async function processAcoustIDTagging(
   apiKey: string,
   force: boolean,
   quiet: boolean,
+  dryRun: boolean,
 ): Promise<ProcessResultStatus> {
   if (!quiet) console.log(`-> Processing file: ${filePath}`);
 
@@ -312,6 +367,16 @@ export async function processAcoustIDTagging(
     return "no_results"; // Or a more specific status
   }
   if (!quiet) console.log(`    Found AcoustID: ${acoustID}`);
+
+  if (dryRun) {
+    if (!quiet) {
+      console.log(
+        `  DRY RUN: Would write ACOUSTID_FINGERPRINT=${fingerprint.substring(0,30)}... and ACOUSTID_ID=${acoustID} to ${filePath}`,
+      );
+      console.log("  DRY RUN: Skipping actual tag writing.");
+    }
+    return "processed"; // Report as processed for dry run
+  }
 
   if (!quiet) {
     console.log(

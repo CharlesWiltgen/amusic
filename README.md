@@ -91,6 +91,14 @@ deno run --allow-read --allow-run --allow-write --allow-env amusic.ts [options] 
   files with existing tags will be skipped.
 - `-q, --quiet`: Suppress informational output during processing. Error messages
   and the final summary report will still be displayed.
+- `--show-tags`: Display existing `ACOUSTID_ID` and `ACOUSTID_FINGERPRINT`
+  tags for the specified files and then exit. This option does not modify
+  files or perform any online lookups.
+- `--dry-run`: Simulate the entire tagging process, including fingerprint
+  generation and AcoustID API lookups (if an `--api-key` is provided), but
+  do not make any actual changes to the audio files. This is useful for
+  testing or previewing what actions would be performed. A notice will be
+  shown in the summary report if a dry run was performed.
 
 After processing all files, a summary report is displayed, showing the number of
 files successfully processed, skipped, and failed.
