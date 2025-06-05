@@ -1,11 +1,10 @@
 import {
-  assert,
   assertEquals,
   assertExists,
   assertNotEquals,
   assertStringIncludes,
 } from "std/assert/mod.ts";
-import { basename, dirname, join, resolve } from "std/path/mod.ts";
+import { basename, join, resolve } from "std/path/mod.ts";
 import { copy, ensureDir, exists } from "std/fs/mod.ts";
 
 const AMUSIC_SCRIPT_PATH = "./amusic.ts"; // Relative to repo root
@@ -16,7 +15,6 @@ const TEST_RUN_BASE_DIR = resolve("./test_run_files"); // Base for temp test fil
 // Selected sample files for testing
 const SAMPLE_MP3 = "mp3_sample_512kb.mp3";
 const SAMPLE_FLAC = "flac_sample_3mb.flac";
-const SAMPLE_OGG = "ogg_sample_512kb.ogg"; // For variety
 
 interface AmusicRunResult {
   code: number;
@@ -325,7 +323,7 @@ Deno.test("amusic.ts Integration Tests (Actual Audio Files)", async (t) => {
       const flacBaseName = basename(flacFile);
 
       // 1. Pre-tag the FLAC file
-      let flacResult = await runAmusicScript([flacBaseName], currentTestDir);
+      const flacResult = await runAmusicScript([flacBaseName], currentTestDir);
       assertEquals(
         flacResult.code,
         0,

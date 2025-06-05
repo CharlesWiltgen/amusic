@@ -38,6 +38,26 @@ export async function hasAcousticIDTags(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Interface for a single result from the AcoustID lookup.
+ */
+interface AcoustIDResult {
+  id: string;
+  score: number;
+  // Potentially other fields like recordings, releasegroups, etc.
+}
+
+/**
+ * Interface for the overall response from the AcoustID API.
+ */
+interface AcoustIDResponse {
+  status: string;
+  results: AcoustIDResult[];
+  error?: {
+    message: string;
+  };
+}
+
+/**
  * Generates the AcousticID fingerprint using fpcalc.
  */
 export async function generateFingerprint(
@@ -77,7 +97,7 @@ export async function lookupFingerprint(
   fingerprint: string,
   duration: number,
   apiKey: string,
-): Promise<any | null> {
+): Promise<AcoustIDResponse | null> {
   const apiUrl =
     `https://api.acoustid.org/v2/lookup?client=${apiKey}&meta=recordings+releasegroups+compress&duration=${
       Math.round(duration)

@@ -120,7 +120,7 @@ if (import.meta.main) {
       console.log(
         `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
       );
-      let otherFailures = failedCount; // Start with general failures
+      const otherFailures = failedCount; // Start with general failures
       // If you decide lookup_failed also contributes to a total "Failed" count shown to user,
       // you might sum them here or ensure `failedCount` is incremented alongside `lookupFailedCount`.
       // For this example, let's assume `failedCount` is for errors not covered by `lookupFailedCount`.
