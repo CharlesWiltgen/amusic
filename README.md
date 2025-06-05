@@ -114,19 +114,6 @@ files successfully processed, skipped, and failed.
    deno run --allow-read --allow-run --allow-write --allow-env amusic.ts --quiet "./path/to/quiet_process.mp3"
    ```
 
-## Future Enhancements
-
-Here are some potential next steps for `amusic`:
-
-- Fetching and embedding richer metadata (e.g., track title, artist, album) from
-  the AcoustID database or other music metadata services.
-- Investigating and potentially integrating a WebAssembly (WASM) or pure
-  JavaScript version of `fpcalc` to reduce reliance on external binary
-  dependencies and simplify user setup.
-- Adding support for other relevant music metadata services or databases.
-- Implementing more advanced batch processing options or developing a library
-  mode for programmatic use.
-
 ## Contributing
 
 Contributions are welcome! If you'd like to help improve `amusic` or add new
