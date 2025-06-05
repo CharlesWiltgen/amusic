@@ -59,10 +59,47 @@ export async function generateFingerprint(filePath: string): Promise<string | nu
 }
 
 /**
- * Writes the ACOUSTID_FINGERPRINT tag to the file using ffmpeg.
+ * Looks up a fingerprint using the AcoustID API.
+ * @param fingerprint The audio fingerprint.
+ * @param duration The duration of the audio file in seconds.
+ * @param apiKey The AcoustID client API key.
+ * @returns The API response or null if an error occurs.
  */
-export async function writeAcousticIDFingerprint(filePath: string, fingerprint: string): Promise<boolean> {
-  // console.log(`  Writing fingerprint to file with ffmpeg...`); // Moved to caller
+export async function lookupFingerprint(fingerprint: string, duration: number, apiKey: string): Promise<any | null> {
+  const apiUrl = `https://api.acoustid.org/v2/lookup?client=${apiKey}&meta=recordings+releasegroups+compress&duration=${Math.round(duration)}&fingerprint=${fingerprint}`;
+  if (!apiKey) {
+    console.error("  AcoustID API key is required for lookup.");
+    return null;
+  }
+
+  try {
+    // console.log(`  Querying AcoustID API: ${apiUrl}`); // For debugging, can be noisy
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      console.error(`  AcoustID API error: ${response.status} ${response.statusText}`);
+      // console.error(`    Response body: ${await response.text()}`); // For more detailed debugging
+      return null;
+    }
+    const data = await response.json();
+    if (data.status === "error") {
+      console.error(`  AcoustID API returned error: ${data.error?.message}`);
+      return null;
+    }
+    if (!data.results || data.results.length === 0) {
+      // console.log("  No results found in AcoustID lookup."); // This is a common case, not necessarily an error
+      return { results: [] }; // Return empty results to distinguish from an error
+    }
+    return data;
+  } catch (e) {
+    console.error(`  Error during AcoustID API request: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file using ffmpeg.
+ */
+export async function writeAcoustIDTags(filePath: string, fingerprint: string, acoustID: string): Promise<boolean> {
   const fileMeta = parsePath(filePath);
   const tempDir = await Deno.makeTempDir({ prefix: "amusic_tagging_" });
   try {
@@ -74,6 +111,7 @@ export async function writeAcousticIDFingerprint(filePath: string, fingerprint: 
         "-i", filePath,
         "-c", "copy",
         "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
+        "-metadata", `ACOUSTID_ID=${acoustID}`,
         tempFilePath,
       ],
       stderr: "piped", // Capture stderr for error messages
@@ -100,16 +138,17 @@ export async function writeAcousticIDFingerprint(filePath: string, fingerprint: 
 /**
  * Represents the status of processing a single file.
  */
-export type ProcessResultStatus = "processed" | "skipped" | "failed";
+export type ProcessResultStatus = "processed" | "skipped" | "failed" | "lookup_failed" | "no_results";
 
 /**
  * Core logic for adding AcousticID tags to a single file.
  * @param filePath The path to the audio file.
+ * @param apiKey The AcoustID client API key.
  * @param force Whether to overwrite existing tags.
  * @param quiet Whether to suppress informational console logs.
  * @returns A status indicating the outcome of the processing.
  */
-export async function processAcoustIDTagging(filePath: string, force: boolean, quiet: boolean): Promise<ProcessResultStatus> {
+export async function processAcoustIDTagging(filePath: string, apiKey: string, force: boolean, quiet: boolean): Promise<ProcessResultStatus> {
   if (!quiet) console.log(`-> Processing file: ${filePath}`);
 
   try {
@@ -143,21 +182,64 @@ export async function processAcoustIDTagging(filePath: string, force: boolean, q
   const fingerprint = await generateFingerprint(filePath);
 
   if (!fingerprint) {
-    // generateFingerprint already logs errors to console.error
     if (!quiet) console.log("  WARNING: Could not generate fingerprint. Skipping.");
     return "failed";
   }
   if (!quiet) console.log(`    Generated Fingerprint: ${fingerprint.substring(0, 30)}...`);
 
-  if (!quiet) console.log("  ACTION: Writing ACOUSTID_FINGERPRINT tag...");
-  const success = await writeAcousticIDFingerprint(filePath, fingerprint);
+  // Duration is needed for the lookup. For simplicity, we'll try to get it from ffprobe.
+  // This could be optimized by getting it once if not available from fpcalc directly.
+  let duration = 0;
+  try {
+    const ffprobeCmd = new Deno.Command("ffprobe", {
+      args: ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filePath],
+      stdout: "piped",
+    });
+    const { stdout: durationOutput } = await ffprobeCmd.output();
+    const durationStr = new TextDecoder().decode(durationOutput).trim();
+    if (durationStr && !isNaN(parseFloat(durationStr))) {
+      duration = parseFloat(durationStr);
+    } else {
+      if (!quiet) console.log("  WARNING: Could not determine audio duration. AcoustID lookup might be less accurate or fail.");
+    }
+  } catch(e) {
+      if (!quiet) console.log(`  WARNING: Could not determine audio duration due to ffprobe error: ${e.message}. AcoustID lookup might be less accurate or fail.`);
+  }
+
+
+  if (!quiet) console.log("  ACTION: Looking up fingerprint with AcoustID API...");
+  const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
+
+  if (!lookupResult) {
+    if (!quiet) console.log("  ERROR: AcoustID API lookup failed.");
+    return "lookup_failed";
+  }
+
+  if (!lookupResult.results || lookupResult.results.length === 0) {
+    if (!quiet) console.log("  INFO: No results found from AcoustID API for this fingerprint.");
+    return "no_results";
+  }
+
+  // For now, pick the first result if available.
+  // More sophisticated logic could be added here (e.g. based on score)
+  const bestResult = lookupResult.results[0];
+  const acoustID = bestResult.id;
+
+  if (!acoustID) {
+    if (!quiet) console.log("  INFO: No AcoustID found in the API results.");
+    return "no_results"; // Or a more specific status
+  }
+  if (!quiet) console.log(`    Found AcoustID: ${acoustID}`);
+
+
+  if (!quiet) console.log("  ACTION: Writing ACOUSTID_FINGERPRINT and ACOUSTID_ID tags...");
+  const success = await writeAcoustIDTags(filePath, fingerprint, acoustID);
 
   if (success) {
-    if (!quiet) console.log("  SUCCESS: AcoustID fingerprint tag processed.");
+    if (!quiet) console.log("  SUCCESS: AcoustID tags processed.");
     return "processed";
   } else {
-    // writeAcousticIDFingerprint already logs errors to console.error
-    if (!quiet) console.log("  ERROR: Failed to process AcoustID fingerprint tag.");
+    if (!quiet) console.log("  ERROR: Failed to write AcoustID tags.");
     return "failed";
   }
 }
