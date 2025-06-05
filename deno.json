@@ -2,7 +2,7 @@
   "importMap": "./import_map.json",
   "tasks": {
     "start": "deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts",
-    "build": "deno compile --allow-read --allow-run --allow-write --allow-env -o amusic src/amusic.ts"
+    "build": "deno compile --allow-read --allow-run --allow-write --allow-env -o dist/amusic src/amusic.ts"
   },
   "exclude": ["dist/", "amusic"],
   "fmt": {

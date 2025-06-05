@@ -108,7 +108,9 @@ export async function lookupFingerprint(
     }
     return data;
   } catch (e) {
-    console.error(`  Error during AcoustID API request: ${e.message}`);
+    // Check if the error is an instance of Error before accessing message
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error(`Error during AcoustID API request: ${errorMessage}`);
     return null;
   }
 }
@@ -153,9 +155,9 @@ export async function writeAcoustIDTags(
       await Deno.rename(tempFilePath, filePath);
       return true;
     } catch (e) {
-      console.error(
-        `  Error replacing original file with tagged version: ${e.message}`,
-      );
+      // Check if the error is an instance of Error before accessing message
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error(`Error replacing original file with tagged version: ${errorMessage}`);
       return false;
     }
   } finally {
@@ -201,8 +203,11 @@ export async function processAcoustIDTagging(
     if (e instanceof Deno.errors.NotFound) {
       console.error(`Error: File not found at "${filePath}".`);
     } else {
-      console.error(`Error accessing file "${filePath}": ${e.message}`);
+      // Check if the error is an instance of Error before accessing message
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error(`Error accessing file "${filePath}": ${errorMessage}`);
     }
+    // Always return 'failed' in case of file access errors
     return "failed";
   }
 
@@ -270,10 +275,12 @@ export async function processAcoustIDTagging(
     }
   } catch (e) {
     if (!quiet) {
-      console.log(
-        `  WARNING: Could not determine audio duration due to ffprobe error: ${e.message}. AcoustID lookup might be less accurate or fail.`,
-      );
+      // Check if the error is an instance of Error before accessing message
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.warn(`WARNING: Could not determine audio duration due to ffprobe error: ${errorMessage}. AcoustID lookup might be less accurate or fail.`);
     }
+    // Return 'failed' as duration is needed for lookup and its absence/error could cause issues
+    return "failed";
   }
 
   if (!quiet) {

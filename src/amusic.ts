@@ -103,12 +103,12 @@ if (import.meta.main) {
               break;
           }
         } catch (error) {
-          // This catch block might be redundant if processAcoustIDTagging handles all its errors
-          // and returns "failed". However, keeping it for unexpected errors.
-          console.error(
-            `Unexpected error processing ${file}: ${error.message}`,
-          );
-          failedCount++; // General failures not caught by specific statuses
+          // Check if the error is an instance of Error before accessing message
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`Unexpected error processing ${file}: ${errorMessage}`);
+          // Increment failed count for unexpected errors and continue to the next file
+          failedCount++;
+          // Do NOT return here, continue processing other files
         }
       }
 
