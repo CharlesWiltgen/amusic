@@ -1,6 +1,42 @@
 // lib/acoustid.ts
 import { parse as parsePath } from "std/path/mod.ts";
 
+export interface AcoustIDApiError {
+  message: string;
+  code?: number; // Optional error code
+}
+
+export interface Recording {
+  id: string;
+  title?: string;
+  artists?: { id: string; name: string }[];
+  duration?: number;
+  releasegroups?: ReleaseGroup[]; // Can be nested
+  // Add other relevant fields if needed
+}
+
+export interface ReleaseGroup {
+  id: string;
+  title?: string;
+  type?: string; // e.g., Album, Single
+  artists?: { id: string; name: string }[];
+  releases?: { id: string; title?: string; medium_count?: number, track_count?: number }[];
+  // Add other relevant fields if needed
+}
+
+export interface ResultItem {
+  id: string; // This is the AcoustID
+  score: number;
+  recordings?: Recording[];
+  // Potentially other fields like 'releasegroups' directly if the API structure varies
+}
+
+export interface LookupResult {
+  status: "ok" | "error";
+  results?: ResultItem[];
+  error?: AcoustIDApiError; // Present if status is "error"
+}
+
 /**
  * Silently checks if the audio file already has AcousticID related tags.
  * Returns true if tags are found, false otherwise.
@@ -131,7 +167,7 @@ export async function lookupFingerprint(
   fingerprint: string,
   duration: number,
   apiKey: string,
-): Promise<any | null> {
+): Promise<LookupResult | null> {
   const apiUrl =
     `https://api.acoustid.org/v2/lookup?client=${apiKey}&meta=recordings+releasegroups+compress&duration=${
       Math.round(duration)
@@ -158,9 +194,9 @@ export async function lookupFingerprint(
     }
     if (!data.results || data.results.length === 0) {
       // console.log("  No results found in AcoustID lookup."); // This is a common case, not necessarily an error
-      return { results: [] }; // Return empty results to distinguish from an error
+      return { status: "ok", results: [] }; // Return empty results to distinguish from an error
     }
-    return data;
+    return data as LookupResult;
   } catch (e) {
     // Check if the error is an instance of Error before accessing message
     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -344,7 +380,12 @@ export async function processAcoustIDTagging(
   const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
 
   if (!lookupResult) {
-    if (!quiet) console.log("  ERROR: AcoustID API lookup failed.");
+    if (!quiet) console.log("  ERROR: AcoustID API lookup failed (null response).");
+    return "lookup_failed";
+  }
+
+  if (lookupResult.status === "error") {
+    if (!quiet) console.log(`  ERROR: AcoustID API returned error: ${lookupResult.error?.message || "Unknown error"}`);
     return "lookup_failed";
   }
 
@@ -357,14 +398,14 @@ export async function processAcoustIDTagging(
     return "no_results";
   }
 
-  // For now, pick the first result if available.
-  // More sophisticated logic could be added here (e.g. based on score)
   const bestResult = lookupResult.results[0];
+  // The 'id' on bestResult is the AcoustID, which should be a string.
+  // The ResultItem interface already types 'id' as string.
   const acoustID = bestResult.id;
 
-  if (!acoustID) {
-    if (!quiet) console.log("  INFO: No AcoustID found in the API results.");
-    return "no_results"; // Or a more specific status
+  if (!acoustID) { // This check might be redundant if 'id' is guaranteed by the type and API, but good for safety.
+    if (!quiet) console.log("  INFO: No AcoustID found in the API results (ID field missing or empty).");
+    return "no_results";
   }
   if (!quiet) console.log(`    Found AcoustID: ${acoustID}`);
 
