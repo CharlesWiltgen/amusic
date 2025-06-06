@@ -163,7 +163,8 @@ async function setAcousticIDTags(
   id: string,
   fingerprint: string,
 ): Promise<void> {
-  const tempOutputFile = filePath + ".tagged.tmp." + basename(filePath).split('.').pop(); // Ensure correct extension for temp
+  const tempOutputFile = filePath + ".tagged.tmp." +
+    basename(filePath).split(".").pop(); // Ensure correct extension for temp
   const originalFilePath = filePath;
 
   // Check if file exists, ffmpeg needs an input file
@@ -187,7 +188,7 @@ async function setAcousticIDTags(
       tempOutputFile,
     ],
   });
-  const { code, stderr }_ = await command.output();
+  const { code, stderr } = await command.output();
   if (code !== 0) {
     try {
       await Deno.remove(tempOutputFile);
@@ -482,12 +483,14 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
   // This change is actually applied in the setAcousticIDTags function below,
   // as I can't re-declare the function here. The diff will show the fix.
 
-  await t.step("Helper: Correct setAcousticIDTags ffmpeg stderr handling", async () => {
-    // This step is just a placeholder to acknowledge the correction.
-    // The actual fix is in the function code itself.
-    assert(true, "Acknowledging correction for setAcousticIDTags.");
-  });
-
+  await t.step(
+    "Helper: Correct setAcousticIDTags ffmpeg stderr handling",
+    async () => {
+      // This step is just a placeholder to acknowledge the correction.
+      // The actual fix is in the function code itself.
+      assert(true, "Acknowledging correction for setAcousticIDTags.");
+    },
+  );
 
   await t.step("--show-tags: Displays existing tags for a file", async () => {
     currentTestDir = await createTestRunDir("show_tags_existing");
@@ -503,13 +506,20 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       currentTestDir,
     );
 
-    assertEquals(result.code, 0, "Script should exit successfully for --show-tags.");
+    assertEquals(
+      result.code,
+      0,
+      "Script should exit successfully for --show-tags.",
+    );
     assertStringIncludes(result.stdout, `File: ${basename(audioFile)}`);
     assertStringIncludes(result.stdout, `ACOUSTID_ID: ${testId}`);
     assertStringIncludes(result.stdout, `ACOUSTID_FINGERPRINT: ${testFp}`);
     assertStringIncludes(result.stdout, "Displaying existing AcoustID tags:");
     // Ensure no processing messages appear
-    assert(!result.stdout.includes("Processing file:"), "Should not attempt full processing.");
+    assert(
+      !result.stdout.includes("Processing file:"),
+      "Should not attempt full processing.",
+    );
 
     await cleanupTestDir(currentTestDir);
   });
@@ -524,46 +534,73 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       currentTestDir,
     );
 
-    assertEquals(result.code, 0, "Script should exit successfully for --show-tags on clean file.");
+    assertEquals(
+      result.code,
+      0,
+      "Script should exit successfully for --show-tags on clean file.",
+    );
     assertStringIncludes(result.stdout, `File: ${basename(audioFile)}`);
     assertStringIncludes(result.stdout, "No AcoustID tags found.");
-    assert(!result.stdout.includes("ACOUSTID_ID: test-id-123"), "Should not show example tags.");
-     await cleanupTestDir(currentTestDir);
-  });
-
-  await t.step("--show-tags: Exits early, ignores --force and other processing", async () => {
-    currentTestDir = await createTestRunDir("show_tags_exits_early");
-    const audioFile = join(currentTestDir, "clean_for_force_test.wav");
-    await createSilentAudioFile(audioFile);
-
-    // Add --force, which would normally trigger processing
-    const result = await runAmusicScript(
-      ["--show-tags", "--force", "--api-key", dummyApiKey, basename(audioFile)],
-      currentTestDir,
-    );
-
-    assertEquals(result.code, 0, "Script should exit successfully for --show-tags with --force.");
-    assertStringIncludes(result.stdout, "No AcoustID tags found."); // Should still report no tags
-    // Crucially, check that it doesn't try to process the file due to --force
     assert(
-      !result.stdout.includes("ACTION: Generating AcoustID fingerprint..."),
-      "--show-tags should prevent fingerprint generation even with --force.",
+      !result.stdout.includes("ACOUSTID_ID: test-id-123"),
+      "Should not show example tags.",
     );
-    assert(
-      !result.stdout.includes("Processing file:"), // General processing header
-      "--show-tags should prevent general processing messages.",
-    );
-    assertStringIncludes(result.stdout, "Displaying existing AcoustID tags:");
-
-
-    // Double check file wasn't modified (though --show-tags shouldn't allow it)
-    const idTag = await getAcousticIDTag(audioFile);
-    const fpTag = await getAcousticIDFingerprintTag(audioFile);
-    assertEquals(idTag, null, "File should not have ACOUSTID_ID after --show-tags with --force.");
-    assertEquals(fpTag, null, "File should not have ACOUSTID_FINGERPRINT after --show-tags with --force.");
-
     await cleanupTestDir(currentTestDir);
   });
+
+  await t.step(
+    "--show-tags: Exits early, ignores --force and other processing",
+    async () => {
+      currentTestDir = await createTestRunDir("show_tags_exits_early");
+      const audioFile = join(currentTestDir, "clean_for_force_test.wav");
+      await createSilentAudioFile(audioFile);
+
+      // Add --force, which would normally trigger processing
+      const result = await runAmusicScript(
+        [
+          "--show-tags",
+          "--force",
+          "--api-key",
+          dummyApiKey,
+          basename(audioFile),
+        ],
+        currentTestDir,
+      );
+
+      assertEquals(
+        result.code,
+        0,
+        "Script should exit successfully for --show-tags with --force.",
+      );
+      assertStringIncludes(result.stdout, "No AcoustID tags found."); // Should still report no tags
+      // Crucially, check that it doesn't try to process the file due to --force
+      assert(
+        !result.stdout.includes("ACTION: Generating AcoustID fingerprint..."),
+        "--show-tags should prevent fingerprint generation even with --force.",
+      );
+      assert(
+        !result.stdout.includes("Processing file:"), // General processing header
+        "--show-tags should prevent general processing messages.",
+      );
+      assertStringIncludes(result.stdout, "Displaying existing AcoustID tags:");
+
+      // Double check file wasn't modified (though --show-tags shouldn't allow it)
+      const idTag = await getAcousticIDTag(audioFile);
+      const fpTag = await getAcousticIDFingerprintTag(audioFile);
+      assertEquals(
+        idTag,
+        null,
+        "File should not have ACOUSTID_ID after --show-tags with --force.",
+      );
+      assertEquals(
+        fpTag,
+        null,
+        "File should not have ACOUSTID_FINGERPRINT after --show-tags with --force.",
+      );
+
+      await cleanupTestDir(currentTestDir);
+    },
+  );
 
   await t.step("--dry-run: Simulates processing, no file write", async () => {
     currentTestDir = await createTestRunDir("dry_run_no_write");
@@ -574,7 +611,11 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
     const initialId = await getAcousticIDTag(audioFile);
     const initialFp = await getAcousticIDFingerprintTag(audioFile);
     assertEquals(initialId, null, "File should initially have no ACOUSTID_ID.");
-    assertEquals(initialFp, null, "File should initially have no ACOUSTID_FINGERPRINT.");
+    assertEquals(
+      initialFp,
+      null,
+      "File should initially have no ACOUSTID_FINGERPRINT.",
+    );
 
     // Attempt to get modification time. Deno.stat might not change for metadata-only ops.
     // We will primarily rely on checking if tags are written or not.
@@ -583,86 +624,159 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
     const apiKey = Deno.env.get("ACOUSTID_API_KEY_TESTING") || dummyApiKey;
     const isRealApiKey = apiKey !== dummyApiKey;
     if (!isRealApiKey && apiKey === dummyApiKey) {
-        console.warn("\n  WARN: ACOUSTID_API_KEY_TESTING not set. --dry-run test will use a dummy key, \n        so actual AcoustID lookup simulation might not be fully verified. \n        Focus will be on 'no file modification'.");
+      console.warn(
+        "\n  WARN: ACOUSTID_API_KEY_TESTING not set. --dry-run test will use a dummy key, \n        so actual AcoustID lookup simulation might not be fully verified. \n        Focus will be on 'no file modification'.",
+      );
     }
-
 
     const result = await runAmusicScript(
       ["--dry-run", "--api-key", apiKey, basename(audioFile)],
       currentTestDir,
     );
 
-    assertEquals(result.code, 0, "Script should exit successfully for --dry-run.");
+    assertEquals(
+      result.code,
+      0,
+      "Script should exit successfully for --dry-run.",
+    );
     // Check for dry run simulation messages
-    assertStringIncludes(result.stdout, `Processing file: ${basename(audioFile)}`);
+    assertStringIncludes(
+      result.stdout,
+      `Processing file: ${basename(audioFile)}`,
+    );
     if (isRealApiKey) { // Only expect lookup messages if we think we did a real lookup
-        assertStringIncludes(result.stdout, "ACTION: Looking up fingerprint with AcoustID API...", "Dry run should still show lookup attempt.");
-        // Depending on the dummy file, it might or might not find results.
-        // The key is that it *tries* and then indicates it *would* write.
-        assertStringIncludes(result.stdout, "DRY RUN: Would write ACOUSTID_FINGERPRINT=", "Dry run should indicate it would write tags.");
+      assertStringIncludes(
+        result.stdout,
+        "ACTION: Looking up fingerprint with AcoustID API...",
+        "Dry run should still show lookup attempt.",
+      );
+      // Depending on the dummy file, it might or might not find results.
+      // The key is that it *tries* and then indicates it *would* write.
+      assertStringIncludes(
+        result.stdout,
+        "DRY RUN: Would write ACOUSTID_FINGERPRINT=",
+        "Dry run should indicate it would write tags.",
+      );
     } else {
-        // If using dummy key, lookup will fail, it might not reach "Would write" if error handling for bad key is aggressive.
-        // However, amusic's current lib/acoustid.ts lookupFingerprint handles API errors gracefully and processAcoustIDTagging
-        // proceeds to the point where it would try to write if results (even empty) were found or if lookup failed but didn't stop flow.
-        // Let's check for the general dry run message from amusic.ts action handler, or the specific one from processAcoustIDTagging
-         assert(result.stdout.includes("DRY RUN: Would write") || result.stdout.includes("AcoustID API lookup failed"), "Expected dry run write indication or lookup failure message.");
+      // If using dummy key, lookup will fail, it might not reach "Would write" if error handling for bad key is aggressive.
+      // However, amusic's current lib/acoustid.ts lookupFingerprint handles API errors gracefully and processAcoustIDTagging
+      // proceeds to the point where it would try to write if results (even empty) were found or if lookup failed but didn't stop flow.
+      // Let's check for the general dry run message from amusic.ts action handler, or the specific one from processAcoustIDTagging
+      assert(
+        result.stdout.includes("DRY RUN: Would write") ||
+          result.stdout.includes("AcoustID API lookup failed"),
+        "Expected dry run write indication or lookup failure message.",
+      );
     }
-    assertStringIncludes(result.stdout, "DRY RUN: Skipping actual tag writing.");
-    assertStringIncludes(result.stdout, "NOTE: This was a dry run. No files were modified.");
+    assertStringIncludes(
+      result.stdout,
+      "DRY RUN: Skipping actual tag writing.",
+    );
+    assertStringIncludes(
+      result.stdout,
+      "NOTE: This was a dry run. No files were modified.",
+    );
 
     // Verify file was not modified
     const finalId = await getAcousticIDTag(audioFile);
     const finalFp = await getAcousticIDFingerprintTag(audioFile);
-    assertEquals(finalId, null, "ACOUSTID_ID should not be written in dry run.");
-    assertEquals(finalFp, null, "ACOUSTID_FINGERPRINT should not be written in dry run.");
-
-    const finalStat = await Deno.stat(audioFile);
-    assertEquals(finalStat.mtime, initialStat.mtime, "File modification time should not change in dry run.");
-
-
-    await cleanupTestDir(currentTestDir);
-  });
-
-  await t.step("--dry-run: With --force on a tagged file, no file write", async () => {
-    currentTestDir = await createTestRunDir("dry_run_force_tagged");
-    const audioFile = join(currentTestDir, "tagged_for_dry_force.wav");
-    await createSilentAudioFile(audioFile);
-
-    const originalId = "id-original-pre-dry-run";
-    const originalFp = "fp-original-pre-dry-run";
-    await setAcousticIDTags(audioFile, originalId, originalFp);
-
-    const apiKey = Deno.env.get("ACOUSTID_API_KEY_TESTING") || dummyApiKey;
-     const isRealApiKey = apiKey !== dummyApiKey;
-     if (!isRealApiKey && apiKey === dummyApiKey) {
-        console.warn("\n  WARN: ACOUSTID_API_KEY_TESTING not set for --dry-run --force test. Lookup simulation may not be fully verified.");
-    }
-
-    const result = await runAmusicScript(
-      ["--dry-run", "--force", "--api-key", apiKey, basename(audioFile)],
-      currentTestDir,
+    assertEquals(
+      finalId,
+      null,
+      "ACOUSTID_ID should not be written in dry run.",
+    );
+    assertEquals(
+      finalFp,
+      null,
+      "ACOUSTID_FINGERPRINT should not be written in dry run.",
     );
 
-    assertEquals(result.code, 0, "Script should exit successfully for --dry-run --force.");
-    assertStringIncludes(result.stdout, `Processing file: ${basename(audioFile)}`);
-    assertStringIncludes(result.stdout, "INFO: File already has AcoustID tags. --force option provided, proceeding to overwrite.");
-    if (isRealApiKey) {
-        assertStringIncludes(result.stdout, "DRY RUN: Would write ACOUSTID_FINGERPRINT=", "Dry run with --force should indicate it would write tags.");
-    } else {
-         assert(result.stdout.includes("DRY RUN: Would write") || result.stdout.includes("AcoustID API lookup failed"), "Expected dry run write indication or lookup failure message with --force.");
-    }
-    assertStringIncludes(result.stdout, "DRY RUN: Skipping actual tag writing.");
-    assertStringIncludes(result.stdout, "NOTE: This was a dry run. No files were modified.");
-
-    // Verify file still has its original tags and was not modified
-    const finalId = await getAcousticIDTag(audioFile);
-    const finalFp = await getAcousticIDFingerprintTag(audioFile);
-    assertEquals(finalId, originalId, "ACOUSTID_ID should remain original in dry run --force.");
-    assertEquals(finalFp, originalFp, "ACOUSTID_FINGERPRINT should remain original in dry run --force.");
+    const finalStat = await Deno.stat(audioFile);
+    assertEquals(
+      finalStat.mtime,
+      initialStat.mtime,
+      "File modification time should not change in dry run.",
+    );
 
     await cleanupTestDir(currentTestDir);
   });
 
+  await t.step(
+    "--dry-run: With --force on a tagged file, no file write",
+    async () => {
+      currentTestDir = await createTestRunDir("dry_run_force_tagged");
+      const audioFile = join(currentTestDir, "tagged_for_dry_force.wav");
+      await createSilentAudioFile(audioFile);
+
+      const originalId = "id-original-pre-dry-run";
+      const originalFp = "fp-original-pre-dry-run";
+      await setAcousticIDTags(audioFile, originalId, originalFp);
+
+      const apiKey = Deno.env.get("ACOUSTID_API_KEY_TESTING") || dummyApiKey;
+      const isRealApiKey = apiKey !== dummyApiKey;
+      if (!isRealApiKey && apiKey === dummyApiKey) {
+        console.warn(
+          "\n  WARN: ACOUSTID_API_KEY_TESTING not set for --dry-run --force test. Lookup simulation may not be fully verified.",
+        );
+      }
+
+      const result = await runAmusicScript(
+        ["--dry-run", "--force", "--api-key", apiKey, basename(audioFile)],
+        currentTestDir,
+      );
+
+      assertEquals(
+        result.code,
+        0,
+        "Script should exit successfully for --dry-run --force.",
+      );
+      assertStringIncludes(
+        result.stdout,
+        `Processing file: ${basename(audioFile)}`,
+      );
+      assertStringIncludes(
+        result.stdout,
+        "INFO: File already has AcoustID tags. --force option provided, proceeding to overwrite.",
+      );
+      if (isRealApiKey) {
+        assertStringIncludes(
+          result.stdout,
+          "DRY RUN: Would write ACOUSTID_FINGERPRINT=",
+          "Dry run with --force should indicate it would write tags.",
+        );
+      } else {
+        assert(
+          result.stdout.includes("DRY RUN: Would write") ||
+            result.stdout.includes("AcoustID API lookup failed"),
+          "Expected dry run write indication or lookup failure message with --force.",
+        );
+      }
+      assertStringIncludes(
+        result.stdout,
+        "DRY RUN: Skipping actual tag writing.",
+      );
+      assertStringIncludes(
+        result.stdout,
+        "NOTE: This was a dry run. No files were modified.",
+      );
+
+      // Verify file still has its original tags and was not modified
+      const finalId = await getAcousticIDTag(audioFile);
+      const finalFp = await getAcousticIDFingerprintTag(audioFile);
+      assertEquals(
+        finalId,
+        originalId,
+        "ACOUSTID_ID should remain original in dry run --force.",
+      );
+      assertEquals(
+        finalFp,
+        originalFp,
+        "ACOUSTID_FINGERPRINT should remain original in dry run --force.",
+      );
+
+      await cleanupTestDir(currentTestDir);
+    },
+  );
 });
 // Fix for setAcousticIDTags - this is a bit of a hack to get the diff applied.
 // Ideally, this would be part of the previous change block for the function itself.
@@ -674,7 +788,8 @@ async function fixedSetAcousticIDTags( // Renamed to avoid re-declaration error 
   id: string,
   fingerprint: string,
 ): Promise<void> {
-  const tempOutputFile = filePath + ".tagged.tmp." + basename(filePath).split('.').pop();
+  const tempOutputFile = filePath + ".tagged.tmp." +
+    basename(filePath).split(".").pop();
   const originalFilePath = filePath;
 
   if (!await exists(filePath, { isFile: true })) {

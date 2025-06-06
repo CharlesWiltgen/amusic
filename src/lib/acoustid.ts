@@ -20,7 +20,12 @@ export interface ReleaseGroup {
   title?: string;
   type?: string; // e.g., Album, Single
   artists?: { id: string; name: string }[];
-  releases?: { id: string; title?: string; medium_count?: number, track_count?: number }[];
+  releases?: {
+    id: string;
+    title?: string;
+    medium_count?: number;
+    track_count?: number;
+  }[];
   // Add other relevant fields if needed
 }
 
@@ -247,7 +252,9 @@ export async function writeAcoustIDTags(
     } catch (e) {
       // Check if the error is an instance of Error before accessing message
       const errorMessage = e instanceof Error ? e.message : String(e);
-      console.error(`Error replacing original file with tagged version: ${errorMessage}`);
+      console.error(
+        `Error replacing original file with tagged version: ${errorMessage}`,
+      );
       return false;
     }
   } finally {
@@ -368,7 +375,9 @@ export async function processAcoustIDTagging(
     if (!quiet) {
       // Check if the error is an instance of Error before accessing message
       const errorMessage = e instanceof Error ? e.message : String(e);
-      console.warn(`WARNING: Could not determine audio duration due to ffprobe error: ${errorMessage}. AcoustID lookup might be less accurate or fail.`);
+      console.warn(
+        `WARNING: Could not determine audio duration due to ffprobe error: ${errorMessage}. AcoustID lookup might be less accurate or fail.`,
+      );
     }
     // Return 'failed' as duration is needed for lookup and its absence/error could cause issues
     return "failed";
@@ -380,12 +389,20 @@ export async function processAcoustIDTagging(
   const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
 
   if (!lookupResult) {
-    if (!quiet) console.log("  ERROR: AcoustID API lookup failed (null response).");
+    if (!quiet) {
+      console.log("  ERROR: AcoustID API lookup failed (null response).");
+    }
     return "lookup_failed";
   }
 
   if (lookupResult.status === "error") {
-    if (!quiet) console.log(`  ERROR: AcoustID API returned error: ${lookupResult.error?.message || "Unknown error"}`);
+    if (!quiet) {
+      console.log(
+        `  ERROR: AcoustID API returned error: ${
+          lookupResult.error?.message || "Unknown error"
+        }`,
+      );
+    }
     return "lookup_failed";
   }
 
@@ -404,7 +421,11 @@ export async function processAcoustIDTagging(
   const acoustID = bestResult.id;
 
   if (!acoustID) { // This check might be redundant if 'id' is guaranteed by the type and API, but good for safety.
-    if (!quiet) console.log("  INFO: No AcoustID found in the API results (ID field missing or empty).");
+    if (!quiet) {
+      console.log(
+        "  INFO: No AcoustID found in the API results (ID field missing or empty).",
+      );
+    }
     return "no_results";
   }
   if (!quiet) console.log(`    Found AcoustID: ${acoustID}`);
@@ -412,7 +433,9 @@ export async function processAcoustIDTagging(
   if (dryRun) {
     if (!quiet) {
       console.log(
-        `  DRY RUN: Would write ACOUSTID_FINGERPRINT=${fingerprint.substring(0,30)}... and ACOUSTID_ID=${acoustID} to ${filePath}`,
+        `  DRY RUN: Would write ACOUSTID_FINGERPRINT=${
+          fingerprint.substring(0, 30)
+        }... and ACOUSTID_ID=${acoustID} to ${filePath}`,
       );
       console.log("  DRY RUN: Skipping actual tag writing.");
     }
