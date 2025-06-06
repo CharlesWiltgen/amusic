@@ -1,5 +1,5 @@
 // lib/acoustid.ts
-import { parse as parsePath } from "std/path/mod.ts";
+import { parse as parsePath } from "jsr:@std/path";
 
 export interface AcoustIDApiError {
   message: string;

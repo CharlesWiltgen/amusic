@@ -1,7 +1,7 @@
 {
   "tasks": {
-    "start": "deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts",
-    "build": "deno compile --allow-read --allow-run --allow-write --allow-env -o dist/amusic src/amusic.ts"
+    "start": "deno run --unstable-lazy-dynamic-imports --allow-read --allow-run --allow-write --allow-env src/amusic.ts",
+    "build": "deno compile --unstable-lazy-dynamic-imports --allow-read --allow-run --allow-write --allow-env -o dist/amusic src/amusic.ts"
   },
   "exclude": ["dist/", "amusic"],
   "fmt": {
@@ -10,8 +10,5 @@
   "lint": {
     "exclude": ["dist/", "amusic"]
   },
-  "imports": {
-    "@cliffy/command": "jsr:@cliffy/command@^1.0.0-rc.7",
-    "std/": "jsr:@std/"
-  }
+  "importMap": "import_map.json"
 }

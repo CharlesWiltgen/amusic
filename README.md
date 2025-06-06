@@ -1,14 +1,14 @@
 # amusic
 
 `amusic` is a command-line music utility for the care and feeding of local music
-libraries. Initially, it focuses on generating and embedding AcousticID
+libraries. Initially, it focuses on generating and embedding AcoustID
 fingerprints.
 
 ## Features
 
-- **AcousticID Fingerprint Generation:** Calculates and embeds the
+- **AcoustID Fingerprint Generation:** Calculates and embeds the
   `ACOUSTID_FINGERPRINT` tag into your audio files locally using `fpcalc`.
-- **Force Overwrite:** Optionally, users can force AcousticID fingerprints to be
+- **Force Overwrite:** Optionally, users can force AcoustID fingerprints to be
   re-calculated and overwritten even for files that already have them using the
   `--force` flag.
 - **Quiet Mode:** Use the `-q, --quiet` flag to suppress informational logs
@@ -16,7 +16,7 @@ fingerprints.
 - **Summary Report:** After all files are processed, a summary is shown
   detailing the number of files successfully processed, skipped, or failed.
 
-### AcousticID Processing Details
+### AcoustID Processing Details
 
 The script now queries the AcoustID web service using the generated fingerprint
 and a user-provided API key. It retrieves and embeds the `ACOUSTID_ID` (the UUID
@@ -34,7 +34,7 @@ PATH:
 - **ffmpeg**: Used for reading and writing metadata to audio files.
 - **ffprobe**: Used for reading metadata from audio files (often included with
   `ffmpeg`).
-- **fpcalc**: Used for generating AcousticID fingerprints. This is typically
+- **fpcalc**: Used for generating AcoustID fingerprints. This is typically
   provided by the `chromaprint-tools` package (or `libchromaprint-tools` on some
   systems). Older distributions might have it in `acoustid-tools`.
 
@@ -86,8 +86,8 @@ deno run --allow-read --allow-run --allow-write --allow-env amusic.ts [options] 
 
 **Options:**
 
-- `-f, --force`: Force recalculation and saving of the AcousticID fingerprint
-  even if existing AcousticID tags are found in the file. Without this flag,
+- `-f, --force`: Force recalculation and saving of the AcoustID fingerprint
+  even if existing AcoustID tags are found in the file. Without this flag,
   files with existing tags will be skipped.
 - `-q, --quiet`: Suppress informational output during processing. Error messages
   and the final summary report will still be displayed.
