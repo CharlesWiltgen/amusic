@@ -18,11 +18,29 @@ fingerprints.
 
 ### AcoustID Processing Details
 
-The script now queries the AcoustID web service using the generated fingerprint
-and a user-provided API key. It retrieves and embeds the `ACOUSTID_ID` (the UUID
-from the AcoustID database). It does NOT yet fetch or embed any other metadata
-(like track title, artist, album) from the AcoustID database, but this is a
-potential future enhancement.
+The script queries the AcoustID web service using the generated fingerprint and
+an AcoustID API key. You can provide your API key via the `--api-key <key>`
+option or by setting the `ACOUSTID_API_KEY` environment variable:
+
+```bash
+# Set your key in the environment (once per session)
+export ACOUSTID_API_KEY=your_api_key_here
+
+# Then run without repeating the flag:
+deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts \
+  <file1> [file2 ...]
+```
+
+Alternatively, you can pass the key directly:
+
+```bash
+deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts \
+  --api-key $ACOUSTID_API_KEY <file1> [file2 ...]
+```
+
+It retrieves and embeds the `ACOUSTID_ID` (the UUID from the AcoustID database);
+it does NOT fetch or embed other metadata (like track title, artist, album), but
+this may be supported in a future release.
 
 ## Dependencies
 
@@ -120,6 +138,13 @@ files successfully processed, skipped, and failed.
 3. **Process a file in quiet mode:**
    ```bash
    deno run --allow-read --allow-run --allow-write --allow-env amusic.ts --quiet "./path/to/quiet_process.mp3"
+   ```
+
+4. **Perform a lookup using the environment variable (preferred):**
+   ```bash
+   export ACOUSTID_API_KEY=your_api_key_here
+   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts \
+     ./path/to/your/music/file.mp3
    ```
 
 ## Contributing
