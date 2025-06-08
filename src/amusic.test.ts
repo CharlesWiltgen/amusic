@@ -65,9 +65,11 @@ async function runAmusicScript(
   cwd: string,
 ): Promise<AmusicRunResult> {
   const scriptPath = resolve(AMUSIC_SCRIPT_PATH); // Ensure absolute path to script
+  const importMapPath = resolve("import_map.json");
   const command = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
+      `--import-map=${importMapPath}`,
       "--allow-read", // For reading audio files, script itself
       "--allow-write", // For writing tags, creating temp files by ffmpeg/fpcalc
       "--allow-run", // For fpcalc, ffmpeg, ffprobe

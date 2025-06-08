@@ -259,8 +259,14 @@ Deno.test("Acoustid Tests", async (t) => {
     const testDuration = 180;
 
     const resetLookupStubs = () => {
-      fetchStub?.restore();
-      consoleErrorStub?.restore();
+      if (fetchStub) {
+        fetchStub.restore();
+        fetchStub = undefined;
+      }
+      if (consoleErrorStub) {
+        consoleErrorStub.restore();
+        consoleErrorStub = undefined;
+      }
     };
 
     await tInner.step("should return parsed data on API success", async () => {
@@ -444,10 +450,22 @@ Deno.test("Acoustid Tests", async (t) => {
     const acoustID = "acoustID_UUID_here";
 
     const resetWriteStubsAndMocks = () => {
-      makeTempDirStub?.restore();
-      renameStub?.restore();
-      removeStub?.restore();
-      consoleErrorStub?.restore();
+      if (makeTempDirStub) {
+        makeTempDirStub.restore();
+        makeTempDirStub = undefined;
+      }
+      if (renameStub) {
+        renameStub.restore();
+        renameStub = undefined;
+      }
+      if (removeStub) {
+        removeStub.restore();
+        removeStub = undefined;
+      }
+      if (consoleErrorStub) {
+        consoleErrorStub.restore();
+        consoleErrorStub = undefined;
+      }
       MockDenoCommand.commandMocks.set("ffmpeg", []); // Clear ffmpeg specific mocks
       MockDenoCommand.clearLastArgs(); // Clear stored arguments
     };
@@ -459,7 +477,7 @@ Deno.test("Acoustid Tests", async (t) => {
         makeTempDirStub = stub(
           Deno,
           "makeTempDir",
-          returnsNext([[tempDirName]]),
+          returnsNext([tempDirName]),
         );
         renameStub = stub(Deno, "rename", returnsNext([Promise.resolve()]));
         removeStub = stub(Deno, "remove", returnsNext([Promise.resolve()]));
@@ -501,7 +519,7 @@ Deno.test("Acoustid Tests", async (t) => {
         makeTempDirStub = stub(
           Deno,
           "makeTempDir",
-          returnsNext([[tempDirName]]),
+          returnsNext([tempDirName]),
         );
         removeStub = stub(Deno, "remove", returnsNext([Promise.resolve()]));
         consoleErrorStub = stub(console, "error");
@@ -536,7 +554,7 @@ Deno.test("Acoustid Tests", async (t) => {
         makeTempDirStub = stub(
           Deno,
           "makeTempDir",
-          returnsNext([[tempDirName]]),
+          returnsNext([tempDirName]),
         );
         renameStub = stub(
           Deno,
@@ -574,7 +592,7 @@ Deno.test("Acoustid Tests", async (t) => {
     // Optional: Test for Deno.remove failure during cleanup (similar to original)
     await tInner.step("should warn if tempDir removal fails", async () => {
       resetWriteStubsAndMocks();
-      makeTempDirStub = stub(Deno, "makeTempDir", returnsNext([[tempDirName]]));
+      makeTempDirStub = stub(Deno, "makeTempDir", returnsNext([tempDirName]));
       MockDenoCommand.addMock("ffmpeg", { code: 1, stderr: "ffmpeg error" }); // ffmpeg fails
       removeStub = stub(
         Deno,

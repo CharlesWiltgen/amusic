@@ -46,13 +46,14 @@ if (import.meta.main) {
     apiKey?: string;
   }
 
-  await new Command()
+  const program = new Command()
     .name("amusic")
     .version("0.1.0")
     .description(
       "Calculate ReplayGain and embed AcousticID fingerprints and IDs.",
-    )
-    // Easy mode: process a music library organized by album directories
+    );
+
+  program
     .command(
       "easy <library:string>",
       "Calculate ReplayGain and AcousticID for each album in a library root directory (each album in its own folder).",
@@ -76,17 +77,16 @@ if (import.meta.main) {
       "AcoustID API key (required for lookups).",
     )
     .action(async (options: CommandOptions, library: string) => {
-      await ensureCommandExists(fpcalcPath);
-      await ensureCommandExists("ffprobe");
-      await ensureCommandExists("ffmpeg");
-      await ensureCommandExists(rsgainPath);
-
       if (!options.apiKey) {
         console.error(
           "Error: --api-key is required for AcoustID lookups in easy mode.",
         );
         Deno.exit(1);
       }
+      await ensureCommandExists(fpcalcPath);
+      await ensureCommandExists("ffprobe");
+      await ensureCommandExists("ffmpeg");
+      await ensureCommandExists(rsgainPath);
 
       try {
         const libInfo = await Deno.stat(library);
@@ -163,12 +163,13 @@ if (import.meta.main) {
       if (options.dryRun) {
         console.log("\nNOTE: This was a dry run. No files were modified.");
       }
-    })
-    .option("-f, --force", "Force reprocessing even if tags exist.")
+
+  program
+    .option("-f, --force", "Force reprocessing even if tags exist.", { override: true })
     .option(
       "-q, --quiet",
       "Suppress informational output. Errors are still shown.",
-      { default: false },
+      { default: false, override: true },
     )
     .option(
       "--show-tags",
@@ -177,10 +178,12 @@ if (import.meta.main) {
     .option(
       "--dry-run",
       "Simulate processing and API lookups but do not write any tags to files.",
+      { override: true },
     )
     .option(
       "--api-key <key:string>",
       "AcoustID API key (required for lookups).",
+      { override: true },
     )
     .arguments("<files:string...>")
     .action(async (options: CommandOptions, ...files: string[]) => {
@@ -191,7 +194,7 @@ if (import.meta.main) {
         }
         for (const file of files) {
           try {
-            await ensureCommandExists("ffprobe"); // Needed for getAcousticIDTags
+            await ensureCommandExists("ffprobe");
             const tags = await getAcousticIDTags(file);
             if (tags) {
               console.log(`\nFile: ${file}`);
@@ -217,22 +220,17 @@ if (import.meta.main) {
         Deno.exit(0); // Exit after showing tags
       }
 
-      await ensureCommandExists(fpcalcPath);
-      await ensureCommandExists("ffprobe");
-      await ensureCommandExists("ffmpeg");
-      await ensureCommandExists(rsgainPath);
-
       if (!options.apiKey) {
-        console.error("Error: --api-key is required for AcoustID lookups.");
-        console.error(
-          "Please provide your AcoustID API key using the --api-key <key> option.",
-        );
-        Deno.exit(1);
+        if (!options.quiet) {
+          console.warn(
+            "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
+          );
+        }
       }
 
       if (!options.quiet) {
         console.log(`Processing ${files.length} file(s)...`);
-        console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`); // Show a portion for confirmation
+        if (options.apiKey) console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
       }
 
       let processedCount = 0;
@@ -243,14 +241,10 @@ if (import.meta.main) {
 
       for (const file of files) {
         try {
-          // The per-file header "Processing: ${file}" is now handled by processAcoustIDTagging (if not quiet)
-          // If quiet, processAcoustIDTagging will not print it.
-          // Adding a newline if not quiet for better separation if processAcoustIDTagging prints its header.
-          if (!options.quiet && files.length > 1) console.log(""); // Add space between file logs
-
+          if (!options.quiet && files.length > 1) console.log("");
           const status = await processAcoustIDTagging(
             file,
-            options.apiKey,
+            options.apiKey ?? "",
             options.force || false,
             options.quiet || false,
             options.dryRun || false,
@@ -267,26 +261,18 @@ if (import.meta.main) {
               break;
             case "lookup_failed":
               lookupFailedCount++;
-              // Consider if lookup_failed should also increment general `failedCount`
-              // For now, keeping them separate in count but maybe sum up for total errors later.
               break;
             case "no_results":
               noResultsCount++;
               break;
           }
         } catch (error) {
-          // Check if the error is an instance of Error before accessing message
-          const errorMessage = error instanceof Error
-            ? error.message
-            : String(error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
           console.error(`Unexpected error processing ${file}: ${errorMessage}`);
-          // Increment failed count for unexpected errors and continue to the next file
           failedCount++;
-          // Do NOT return here, continue processing other files
         }
       }
 
-      // Print Summary Report
       console.log("\n--- Processing Complete ---");
       console.log(`Successfully processed: ${processedCount}`);
       console.log(`Skipped (already tagged/force not used): ${skippedCount}`);
@@ -294,17 +280,10 @@ if (import.meta.main) {
       console.log(
         `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
       );
-      const otherFailures = failedCount; // Start with general failures
-      // If you decide lookup_failed also contributes to a total "Failed" count shown to user,
-      // you might sum them here or ensure `failedCount` is incremented alongside `lookupFailedCount`.
-      // For this example, let's assume `failedCount` is for errors not covered by `lookupFailedCount`.
-      console.log(
-        `Other failures (e.g., file access, fpcalc): ${otherFailures}`,
-      );
+      console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
       console.log("---------------------------");
-      if (options.dryRun) {
-        console.log("\nNOTE: This was a dry run. No files were modified.");
-      }
-    })
-    .parse(Deno.args);
+      if (options.dryRun) console.log("\nNOTE: This was a dry run. No files were modified.");
+    });
+
+  await program.parse(Deno.args);
 }

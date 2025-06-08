@@ -332,52 +332,47 @@ export async function processAcoustIDTagging(
     return "failed";
   }
 
-  if (!quiet) {
-    console.log("  ACTION: Looking up fingerprint with AcoustID API...");
-  }
-  const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
+  let acoustIDToWrite = "";
+  if (apiKey) {
+    if (!quiet) console.log("  ACTION: Looking up fingerprint with AcoustID API...");
+    const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
 
-  if (!lookupResult) {
-    if (!quiet) {
-      console.log("  ERROR: AcoustID API lookup failed (null response).");
+    if (!lookupResult) {
+      if (!quiet) {
+        console.log("  ERROR: AcoustID API lookup failed (null response).");
+      }
+      return "lookup_failed";
     }
-    return "lookup_failed";
-  }
 
-  if (lookupResult.status === "error") {
-    if (!quiet) {
-      console.log(
-        `  ERROR: AcoustID API returned error: ${
-          lookupResult.error?.message || "Unknown error"
-        }`,
-      );
+    if (lookupResult.status === "error") {
+      if (!quiet) {
+        console.log(
+          `  ERROR: AcoustID API returned error: ${
+            lookupResult.error?.message || "Unknown error"
+          }`,
+        );
+      }
+      return "lookup_failed";
     }
-    return "lookup_failed";
-  }
 
-  if (!lookupResult.results || lookupResult.results.length === 0) {
-    if (!quiet) {
-      console.log(
-        "  INFO: No results found from AcoustID API for this fingerprint.",
-      );
+    if (!lookupResult.results || lookupResult.results.length === 0) {
+      if (!quiet) {
+        console.log(
+          "  INFO: No results found from AcoustID API for this fingerprint.",
+        );
+      }
+      return "no_results";
     }
-    return "no_results";
-  }
 
-  const bestResult = lookupResult.results[0];
-  // The 'id' on bestResult is the AcoustID, which should be a string.
-  // The ResultItem interface already types 'id' as string.
-  const acoustID = bestResult.id;
-
-  if (!acoustID) { // This check might be redundant if 'id' is guaranteed by the type and API, but good for safety.
+    acoustIDToWrite = lookupResult.results[0].id;
+    if (!quiet) console.log(`    Found AcoustID: ${acoustIDToWrite}`);
+  } else {
     if (!quiet) {
       console.log(
-        "  INFO: No AcoustID found in the API results (ID field missing or empty).",
+        "  INFO: No AcoustID API key provided, skipping AcoustID ID tagging.",
       );
     }
-    return "no_results";
   }
-  if (!quiet) console.log(`    Found AcoustID: ${acoustID}`);
 
   if (dryRun) {
     if (!quiet) {
@@ -396,10 +391,10 @@ export async function processAcoustIDTagging(
       "  ACTION: Writing ACOUSTID_FINGERPRINT and ACOUSTID_ID tags...",
     );
   }
-  const success = await writeAcoustIDTags(filePath, fingerprint, acoustID);
+  const success = await writeAcoustIDTags(filePath, fingerprint, acoustIDToWrite);
 
   if (success) {
-    if (!quiet) console.log("  SUCCESS: AcoustID tags processed.");
+    if (!quiet) console.log("  SUCCESS: AcoustID fingerprint tag processed.");
     return "processed";
   } else {
     if (!quiet) console.log("  ERROR: Failed to write AcoustID tags.");
