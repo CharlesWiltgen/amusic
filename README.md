@@ -1,20 +1,36 @@
 # amusic
 
 `amusic` is a command-line music utility for the care and feeding of local music
-libraries. Initially, it focuses on generating and embedding AcoustID
+libraries.
+
+Initially inspired by `rsgain` (especially its `easy` mode), its early evolution
+is focused on augmenting its capabilities with generating and embedding AcoustID
 fingerprints.
 
 ## Features
 
-- **AcoustID Fingerprint Generation:** Calculates and embeds the
-  `ACOUSTID_FINGERPRINT` tag into your audio files locally using `fpcalc`.
-- **Force Overwrite:** Optionally, users can force AcoustID fingerprints to be
+- **ReplayGain generation** — Calculates and embeds ReplayGain metadata. This
+  helps audio players avoid the common problem of having to manually adjust
+  volume levels between tracks when playing audio from albums that have been
+  mastered at different loudness levels.
+- **AcoustID Fingerprint Generation** — Calculates and embeds an AcoustID
+  fingerprint (`ACOUSTID_FINGERPRINT` tag). This uniquely identifies an audio
+  file (typically a music track), which will later help associate the audio file
+  with metadata including Title, Artist, Album, and lots more.
+- **Force Overwrite** — Optionally, users can force AcoustID fingerprints to be
   re-calculated and overwritten even for files that already have them using the
   `--force` flag.
-- **Quiet Mode:** Use the `-q, --quiet` flag to suppress informational logs
+- **Quiet Mode** — Use the `-q`/`--quiet` flag to suppress detail displayed
   during processing. Errors and the final summary report are still displayed.
-- **Summary Report:** After all files are processed, a summary is shown
+- **Summary Report** — After all files are processed, a summary is shown
   detailing the number of files successfully processed, skipped, or failed.
+
+### To Do
+
+- 🚧 **Apple SoundCheck generation** — Calculates and embeds Apple SoundCheck
+  metadata, which is Apple’s equivalent of ReplayGain.
+- 🚧 **Ultra high-quality AAC encoding** — On macOS, `amusic` will be able to
+  encode lossless audio (FLAC, WAV) to audibly-transparent `.m4a` files.
 
 ### AcoustID Processing Details
 
@@ -45,43 +61,57 @@ this may be supported in a future release.
 ## Dependencies
 
 The following command-line tools must be installed and available in the system's
-PATH:
+PATH (except for **fpcalc** and **rsgain**, which are provided in the `vendor`
+directory for supported platforms):
 
 - **Deno**: The runtime for the script. Installation instructions can be found
   at [https://deno.land/](https://deno.land/).
 - **ffmpeg**: Used for reading and writing metadata to audio files.
 - **ffprobe**: Used for reading metadata from audio files (often included with
   `ffmpeg`).
-- **fpcalc**: Used for generating AcoustID fingerprints. This is typically
-  provided by the `chromaprint-tools` package (or `libchromaprint-tools` on some
-  systems). Older distributions might have it in `acoustid-tools`.
+- **fpcalc**: Used for generating AcoustID fingerprints. A native binary is
+  included in the `vendor` directory; no separate installation is required.
+- **rsgain**: Used for ReplayGain analysis and metadata tagging. A native binary
+  is included in the `vendor` directory; no separate installation is required.
 
 The script actively checks for the presence of `ffmpeg`, `ffprobe`, and `fpcalc`
 at runtime using its `ensureCommandExists` function. Future work could explore
 WebAssembly (WASM) or pure JavaScript alternatives for `fpcalc` to minimize
 external binary dependencies and simplify the setup process for users.
 
-You can usually install these dependencies using your system's package manager.
-For example, on Debian/Ubuntu:
+You can install the remaining dependencies (`ffmpeg`, `ffprobe`, and `rsgain`,
+if needed) using your system's package manager. For example, on Debian/Ubuntu:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ffmpeg chromaprint-tools
+sudo apt-get install -y ffmpeg
 ```
 
 On macOS (using Homebrew):
 
 ```bash
-brew install ffmpeg chromaprint
+brew install ffmpeg
 ```
 
 ## Installation
 
-1. Ensure Deno and the other dependencies (ffmpeg, ffprobe, fpcalc) are
-   installed.
+1. Ensure Deno and the other dependencies (ffmpeg, ffprobe) are installed.
 2. Clone this repository or download the `amusic.ts` script.
+3. (Optional) Build a standalone executable (includes the platform-specific
+   vendor binaries):
+
+   ```bash
+   deno task build
+   ```
 
 ## Usage
+
+> **Note:** If you've built a standalone executable using `deno task build`, you
+> can run it directly from `dist/amusic`:
+
+```bash
+./dist/amusic [options] <file1> [file2 ...]
+```
 
 To use `amusic`, navigate to the directory containing `amusic.ts` and run the
 script using `deno run`. Provide the paths to the audio files you want to

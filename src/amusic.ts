@@ -1,6 +1,7 @@
 // amusic.ts
 import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
+import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 
 /**
  * Checks if a command is available in the system PATH.
@@ -26,6 +27,10 @@ async function ensureCommandExists(command: string): Promise<void> {
     // console.warn(`Notice: Could not verify version for "${command}" (may not use -version flag), but proceeding.`);
   }
 }
+
+// Resolve platform-specific vendor binaries for fpcalc and rsgain
+const fpcalcPath = getVendorBinaryPath("fpcalc");
+const rsgainPath = getVendorBinaryPath("rsgain");
 
 // Functions `hasAcousticIDTags`, `generateFingerprint`, `writeAcousticIDFingerprint`,
 // and `processAcousticIDTagging` have been moved to lib/acoustid.ts
@@ -96,9 +101,10 @@ if (import.meta.main) {
         Deno.exit(0); // Exit after showing tags
       }
 
-      await ensureCommandExists("fpcalc");
+      await ensureCommandExists(fpcalcPath);
       await ensureCommandExists("ffprobe");
       await ensureCommandExists("ffmpeg");
+      await ensureCommandExists(rsgainPath);
 
       if (!options.apiKey) {
         console.error("Error: --api-key is required for AcoustID lookups.");

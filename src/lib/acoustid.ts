@@ -1,5 +1,6 @@
 // lib/acoustid.ts
 import { parse as parsePath } from "jsr:@std/path";
+import { getVendorBinaryPath } from "./vendor_tools.ts";
 
 export interface AcoustIDApiError {
   message: string;
@@ -139,7 +140,8 @@ export async function generateFingerprint(
   filePath: string,
 ): Promise<string | null> {
   // console.log("  Generating AcoustID fingerprint with fpcalc..."); // Moved to caller
-  const command = new Deno.Command("fpcalc", {
+  const fpcalcPath = getVendorBinaryPath("fpcalc");
+  const command = new Deno.Command(fpcalcPath, {
     args: ["-plain", filePath],
     stdout: "piped",
     stderr: "piped",
