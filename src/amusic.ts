@@ -2,6 +2,7 @@
 import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
+import { calculateReplayGain } from "./lib/replaygain.ts";
 import { join } from "std/path/mod.ts";
 
 /**
@@ -107,17 +108,9 @@ if (import.meta.main) {
       for await (const entry of Deno.readDir(library)) {
         if (!entry.isDirectory) continue;
         const albumDir = join(library, entry.name);
-        if (!options.quiet) {
-          console.log(`\nProcessing album: ${albumDir}`);
-          console.log("  ACTION: Calculating ReplayGain for album...");
-        }
-        const rgCmd = new Deno.Command(rsgainPath, {
-          args: [albumDir],
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-        const { code: rgCode } = await rgCmd.output();
-        if (rgCode !== 0) {
+        if (!options.quiet) console.log(`\nProcessing album: ${albumDir}`);
+        const success = await calculateReplayGain(albumDir, options.quiet);
+        if (!success) {
           console.error(
             `  ERROR: ReplayGain calculation failed for album "${albumDir}". Skipping AcousticID tagging for this album.`,
           );
