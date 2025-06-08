@@ -16,7 +16,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x # Use a specific version or v1.x for latest 1.x
+          deno-version: v2.x # Use a specific version or v2.x for latest 2.x
 
       - name: Run Deno Lint
         run: deno lint
@@ -34,7 +34,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: v2.x
 
       - name: Install system dependencies (ffmpeg, fpcalc)
         run: |
