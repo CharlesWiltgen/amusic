@@ -334,7 +334,9 @@ export async function processAcoustIDTagging(
 
   let acoustIDToWrite = "";
   if (apiKey) {
-    if (!quiet) console.log("  ACTION: Looking up fingerprint with AcoustID API...");
+    if (!quiet) {
+      console.log("  ACTION: Looking up fingerprint with AcoustID API...");
+    }
     const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
 
     if (!lookupResult) {
@@ -379,7 +381,7 @@ export async function processAcoustIDTagging(
       console.log(
         `  DRY RUN: Would write ACOUSTID_FINGERPRINT=${
           fingerprint.substring(0, 30)
-        }... and ACOUSTID_ID=${acoustID} to ${filePath}`,
+        }... and ACOUSTID_ID=${acoustIDToWrite} to ${filePath}`,
       );
       console.log("  DRY RUN: Skipping actual tag writing.");
     }
@@ -391,7 +393,11 @@ export async function processAcoustIDTagging(
       "  ACTION: Writing ACOUSTID_FINGERPRINT and ACOUSTID_ID tags...",
     );
   }
-  const success = await writeAcoustIDTags(filePath, fingerprint, acoustIDToWrite);
+  const success = await writeAcoustIDTags(
+    filePath,
+    fingerprint,
+    acoustIDToWrite,
+  );
 
   if (success) {
     if (!quiet) console.log("  SUCCESS: AcoustID fingerprint tag processed.");

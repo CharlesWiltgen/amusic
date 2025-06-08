@@ -163,9 +163,12 @@ if (import.meta.main) {
       if (options.dryRun) {
         console.log("\nNOTE: This was a dry run. No files were modified.");
       }
+    });
 
   program
-    .option("-f, --force", "Force reprocessing even if tags exist.", { override: true })
+    .option("-f, --force", "Force reprocessing even if tags exist.", {
+      override: true,
+    })
     .option(
       "-q, --quiet",
       "Suppress informational output. Errors are still shown.",
@@ -230,7 +233,9 @@ if (import.meta.main) {
 
       if (!options.quiet) {
         console.log(`Processing ${files.length} file(s)...`);
-        if (options.apiKey) console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
+        if (options.apiKey) {
+          console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
+        }
       }
 
       let processedCount = 0;
@@ -267,7 +272,9 @@ if (import.meta.main) {
               break;
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = error instanceof Error
+            ? error.message
+            : String(error);
           console.error(`Unexpected error processing ${file}: ${errorMessage}`);
           failedCount++;
         }
@@ -282,7 +289,9 @@ if (import.meta.main) {
       );
       console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
       console.log("---------------------------");
-      if (options.dryRun) console.log("\nNOTE: This was a dry run. No files were modified.");
+      if (options.dryRun) {
+        console.log("\nNOTE: This was a dry run. No files were modified.");
+      }
     });
 
   await program.parse(Deno.args);
