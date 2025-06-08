@@ -1,5 +1,4 @@
 import {
-  assert,
   assertEquals,
   assertExists,
   assertStringIncludes,
@@ -10,7 +9,6 @@ import {
   hasAcousticIDTags,
   // writeAcousticIDFingerprint, // Replaced by writeAcoustIDTags
   lookupFingerprint,
-  processAcoustIDTagging, // Now that it has more logic, we might want to test it
   writeAcoustIDTags,
 } from "./acoustid.ts"; // Adjust path as necessary
 import { parse as parsePath } from "std/path/mod.ts";
@@ -253,8 +251,8 @@ Deno.test("Acoustid Tests", async (t) => {
   });
 
   await t.step("lookupFingerprint", async (tInner) => {
-    let fetchStub: any;
-    let consoleErrorStub: any;
+    let fetchStub;
+    let consoleErrorStub;
     const testApiKey = "testkey";
     const testFingerprint = "testfp";
     const testDuration = 180;
@@ -435,10 +433,10 @@ Deno.test("Acoustid Tests", async (t) => {
   });
 
   await t.step("writeAcoustIDTags", async (tInner) => {
-    let makeTempDirStub: any;
-    let renameStub: any;
-    let removeStub: any;
-    let consoleErrorStub: any;
+    let makeTempDirStub;
+    let renameStub;
+    let removeStub;
+    let consoleErrorStub;
     const tempDirName = "/tmp/fake_temp_dir_amusic_tagger_XYZ"; // Unique name
     const inputFilePath = "testfile.ogg"; // Different extension for variety
     const fingerprint = "testFP123abc";

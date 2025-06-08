@@ -5,7 +5,7 @@ import {
   assertNotEquals,
   assertStringIncludes,
 } from "std/assert/mod.ts";
-import { basename, dirname, join, resolve } from "std/path/mod.ts";
+import { basename, join, resolve } from "std/path/mod.ts";
 import { copy, ensureDir, exists } from "std/fs/mod.ts";
 
 const AMUSIC_SCRIPT_PATH = "./amusic.ts"; // Relative to repo root
@@ -16,7 +16,7 @@ const TEST_RUN_BASE_DIR = resolve("./test_run_files"); // Base for temp test fil
 // Selected sample files for testing
 const SAMPLE_MP3 = "mp3_sample_512kb.mp3";
 const SAMPLE_FLAC = "flac_sample_3mb.flac";
-const SAMPLE_OGG = "ogg_sample_512kb.ogg"; // For variety
+const _SAMPLE_OGG = "ogg_sample_512kb.ogg"; // For variety
 
 interface AmusicRunResult {
   code: number;
@@ -132,7 +132,6 @@ const getAcousticIDTag = (filePath: string) =>
 // Helper to create a short silent audio file using ffmpeg
 async function createSilentAudioFile(
   filePath: string,
-  format: string = "wav",
   duration: string = "0.02", // Shorter duration
 ): Promise<void> {
   const cmd = new Deno.Command("ffmpeg", {
@@ -401,7 +400,7 @@ Deno.test("amusic.ts Integration Tests", async (t) => {
       const flacBaseName = basename(flacFile);
 
       // 1. Pre-tag the FLAC file
-      let flacResult = await runAmusicScript([flacBaseName], currentTestDir);
+      const flacResult = await runAmusicScript([flacBaseName], currentTestDir);
       assertEquals(
         flacResult.code,
         0,
@@ -485,7 +484,7 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
 
   await t.step(
     "Helper: Correct setAcousticIDTags ffmpeg stderr handling",
-    async () => {
+    () => {
       // This step is just a placeholder to acknowledge the correction.
       // The actual fix is in the function code itself.
       assert(true, "Acknowledging correction for setAcousticIDTags.");
@@ -778,55 +777,3 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
     },
   );
 });
-// Fix for setAcousticIDTags - this is a bit of a hack to get the diff applied.
-// Ideally, this would be part of the previous change block for the function itself.
-// The content of the function is repeated here with the fix.
-// --- Start of function fix
-// Helper to set specific AcoustID tags using ffmpeg
-async function fixedSetAcousticIDTags( // Renamed to avoid re-declaration error if test runner is finicky
-  filePath: string,
-  id: string,
-  fingerprint: string,
-): Promise<void> {
-  const tempOutputFile = filePath + ".tagged.tmp." +
-    basename(filePath).split(".").pop();
-  const originalFilePath = filePath;
-
-  if (!await exists(filePath, { isFile: true })) {
-    throw new Error(`File not found at ${filePath}, cannot set tags.`);
-  }
-
-  const command = new Deno.Command("ffmpeg", {
-    args: [
-      "-i",
-      originalFilePath,
-      "-c",
-      "copy",
-      "-metadata",
-      `ACOUSTID_ID=${id}`,
-      "-metadata",
-      `ACOUSTID_FINGERPRINT=${fingerprint}`,
-      "-loglevel",
-      "quiet",
-      "-y",
-      tempOutputFile,
-    ],
-  });
-  const { code, stderr } = await command.output(); // Corrected: removed underscore from stderr_
-  if (code !== 0) {
-    try {
-      await Deno.remove(tempOutputFile);
-    } catch (_e) { /* ignore */ }
-    throw new Error(
-      `ffmpeg failed to set tags for ${originalFilePath}: ${
-        new TextDecoder().decode(stderr)
-      }`,
-    );
-  }
-  await Deno.rename(tempOutputFile, originalFilePath);
-}
-// --- End of function fix
-// Note: The above fixedSetAcousticIDTags is for diff generation.
-// The actual fix should be in the original setAcousticIDTags function.
-// I'll ensure the original function is corrected in the final combined diff.
-// For now, this structure helps generate the diff for the tests and the fix separately.
