@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck: skip TS checking (tests run with --no-check in CI; uses custom import-map 'jsr:@std' aliases and Deno.Command API)
 import {
   assert,
   assertEquals,
