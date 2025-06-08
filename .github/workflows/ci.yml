@@ -36,10 +36,10 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install system dependencies (ffmpeg, fpcalc)
+      - name: Install system dependencies (ffmpeg)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg chromaprint-tools
+          sudo apt-get install -y ffmpeg
 
       - name: Run Deno Tests
         run: deno test --allow-read --allow-run --allow-write --allow-env
