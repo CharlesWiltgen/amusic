@@ -1,5 +1,4 @@
 // lib/acoustid.ts
-import { parse as parsePath } from "jsr:@std/path";
 import { getVendorBinaryPath } from "./vendor_tools.ts";
 import { writeAcoustIDTags } from "./tagging.ts";
 export { writeAcoustIDTags };
