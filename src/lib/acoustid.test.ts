@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck: Complex mocking setup
 import {
   assertEquals,
   assertExists,
