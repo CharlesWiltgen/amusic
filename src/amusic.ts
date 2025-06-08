@@ -2,6 +2,7 @@
 import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
+import { join } from "std/path/mod.ts";
 
 /**
  * Checks if a command is available in the system PATH.
@@ -47,7 +48,129 @@ if (import.meta.main) {
   await new Command()
     .name("amusic")
     .version("0.1.0")
-    .description("Tag audio files with AcousticID fingerprints and IDs.")
+    .description(
+      "Calculate ReplayGain and embed AcousticID fingerprints and IDs.",
+    )
+    // Easy mode: process a music library organized by album directories
+    .command(
+      "easy <library:string>",
+      "Calculate ReplayGain and AcousticID for each album in a library root directory (each album in its own folder).",
+    )
+    .option(
+      "-f, --force",
+      "Force reprocessing AcoustID fingerprints even if tags exist.",
+    )
+    .option(
+      "-q, --quiet",
+      "Suppress informational output. Errors are still shown.",
+      { default: false },
+    )
+    .option(
+      "--dry-run",
+      "Simulate processing and API lookups but do not write any tags to files.",
+      { default: false },
+    )
+    .option(
+      "--api-key <key:string>",
+      "AcoustID API key (required for lookups).",
+    )
+    .action(async (options: CommandOptions, library: string) => {
+      await ensureCommandExists(fpcalcPath);
+      await ensureCommandExists("ffprobe");
+      await ensureCommandExists("ffmpeg");
+      await ensureCommandExists(rsgainPath);
+
+      if (!options.apiKey) {
+        console.error(
+          "Error: --api-key is required for AcoustID lookups in easy mode.",
+        );
+        Deno.exit(1);
+      }
+
+      try {
+        const libInfo = await Deno.stat(library);
+        if (!libInfo.isDirectory) {
+          console.error(`Error: "${library}" is not a directory.`);
+          Deno.exit(1);
+        }
+      } catch {
+        console.error(`Error: Directory not found at "${library}".`);
+        Deno.exit(1);
+      }
+
+      let processedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      let lookupFailedCount = 0;
+      let noResultsCount = 0;
+
+      for await (const entry of Deno.readDir(library)) {
+        if (!entry.isDirectory) continue;
+        const albumDir = join(library, entry.name);
+        if (!options.quiet) {
+          console.log(`\nProcessing album: ${albumDir}`);
+          console.log("  ACTION: Calculating ReplayGain for album...");
+        }
+        const rgCmd = new Deno.Command(rsgainPath, {
+          args: [albumDir],
+          stdout: "inherit",
+          stderr: "inherit",
+        });
+        const { code: rgCode } = await rgCmd.output();
+        if (rgCode !== 0) {
+          console.error(
+            `  ERROR: ReplayGain calculation failed for album "${albumDir}". Skipping AcousticID tagging for this album.`,
+          );
+          continue;
+        }
+
+        for await (const fileEntry of Deno.readDir(albumDir)) {
+          if (!fileEntry.isFile) continue;
+          const filePath = join(albumDir, fileEntry.name);
+          if (!options.quiet) console.log("");
+          try {
+            const status = await processAcoustIDTagging(
+              filePath,
+              options.apiKey!,
+              options.force || false,
+              options.quiet || false,
+              options.dryRun || false,
+            );
+            switch (status) {
+              case "processed":
+                processedCount++;
+                break;
+              case "skipped":
+                skippedCount++;
+                break;
+              case "failed":
+                failedCount++;
+                break;
+              case "lookup_failed":
+                lookupFailedCount++;
+                break;
+              case "no_results":
+                noResultsCount++;
+                break;
+            }
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error(`Unexpected error processing ${filePath}: ${msg}`);
+            failedCount++;
+          }
+        }
+      }
+
+      console.log("\n--- Easy Mode Complete ---");
+      console.log(`Files processed: ${processedCount}`);
+      console.log(`Skipped (already tagged): ${skippedCount}`);
+      console.log(`No AcoustID results found: ${noResultsCount}`);
+      console.log(`AcoustID lookup failed: ${lookupFailedCount}`);
+      console.log(`Other failures: ${failedCount}`);
+      if (options.dryRun) {
+        console.log("\nNOTE: This was a dry run. No files were modified.");
+      }
+    })
     .option("-f, --force", "Force reprocessing even if tags exist.")
     .option(
       "-q, --quiet",

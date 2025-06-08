@@ -177,6 +177,11 @@ files successfully processed, skipped, and failed.
      ./path/to/your/music/file.mp3
    ```
 
+5. **Easy Mode: Process a music library organized by album folders. Calculates ReplayGain for each album and AcousticID for each track:**
+   ```bash
+   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts easy /path/to/music/library --api-key $ACOUSTID_API_KEY
+   ```
+
 ## Contributing
 
 Contributions are welcome! If you'd like to help improve `amusic` or add new
