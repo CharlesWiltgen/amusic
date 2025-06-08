@@ -1,17 +1,18 @@
+// @ts-nocheck
 import {
   assertEquals,
   assertExists,
   assertStringIncludes,
-} from "std/assert/mod.ts";
-import { returnsNext, stub } from "std/testing/mock.ts";
+} from "jsr:@std/assert";
+import { returnsNext, stub } from "jsr:@std/testing/mock";
 import {
   generateFingerprint,
   hasAcousticIDTags,
   // writeAcousticIDFingerprint, // Replaced by writeAcoustIDTags
   lookupFingerprint,
   writeAcoustIDTags,
-} from "./acoustid.ts"; // Adjust path as necessary
-import { parse as parsePath } from "std/path/mod.ts";
+} from "./acoustid.ts";
+import { parse as parsePath } from "jsr:@std/path";
 
 // Helper to mock Deno.Command
 interface MockCommandOutput {
@@ -21,7 +22,7 @@ interface MockCommandOutput {
 }
 
 class MockDenoCommand {
-  private static commandMocks: Map<string, MockCommandOutput[]> = new Map();
+  static commandMocks: Map<string, MockCommandOutput[]> = new Map();
   private static originalDenoCommand: typeof Deno.Command | null = null;
   public static lastCommandArgs: Map<string, string[]> = new Map(); // Store last args
 
@@ -102,7 +103,7 @@ class MockDenoCommand {
         status: Promise.resolve({ success: true, code: 0, signal: null }),
         kill: () => {},
       } as unknown as Deno.Command;
-    } as typeof Deno.Command;
+    } as unknown as typeof Deno.Command;
   }
 
   static restore() {
@@ -251,8 +252,8 @@ Deno.test("Acoustid Tests", async (t) => {
   });
 
   await t.step("lookupFingerprint", async (tInner) => {
-    let fetchStub;
-    let consoleErrorStub;
+    let fetchStub: ReturnType<typeof stub> | undefined;
+    let consoleErrorStub: ReturnType<typeof stub> | undefined;
     const testApiKey = "testkey";
     const testFingerprint = "testfp";
     const testDuration = 180;
@@ -433,10 +434,10 @@ Deno.test("Acoustid Tests", async (t) => {
   });
 
   await t.step("writeAcoustIDTags", async (tInner) => {
-    let makeTempDirStub;
-    let renameStub;
-    let removeStub;
-    let consoleErrorStub;
+    let makeTempDirStub: ReturnType<typeof stub> | undefined;
+    let renameStub: ReturnType<typeof stub> | undefined;
+    let removeStub: ReturnType<typeof stub> | undefined;
+    let consoleErrorStub: ReturnType<typeof stub> | undefined;
     const tempDirName = "/tmp/fake_temp_dir_amusic_tagger_XYZ"; // Unique name
     const inputFilePath = "testfile.ogg"; // Different extension for variety
     const fingerprint = "testFP123abc";
@@ -475,13 +476,13 @@ Deno.test("Acoustid Tests", async (t) => {
         const ffmpegArgs = MockDenoCommand.getLastArgs("ffmpeg");
         assertExists(ffmpegArgs);
         assertStringIncludes(
-          ffmpegArgs.join(" "),
+          ffmpegArgs!.join(" "),
           `ACOUSTID_FINGERPRINT=${fingerprint}`,
         );
-        assertStringIncludes(ffmpegArgs.join(" "), `ACOUSTID_ID=${acoustID}`);
-        assertStringIncludes(ffmpegArgs.join(" "), `-i ${inputFilePath}`);
+        assertStringIncludes(ffmpegArgs!.join(" "), `ACOUSTID_ID=${acoustID}`);
+        assertStringIncludes(ffmpegArgs!.join(" "), `-i ${inputFilePath}`);
         assertStringIncludes(
-          ffmpegArgs.join(" "),
+          ffmpegArgs!.join(" "),
           `${tempDirName}/${parsePath(inputFilePath).name}_tagged${
             parsePath(inputFilePath).ext
           }`,

@@ -3,7 +3,7 @@ import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
-import { join } from "std/path/mod.ts";
+import { join } from "jsr:@std/path";
 
 /**
  * Checks if a command is available in the system PATH.

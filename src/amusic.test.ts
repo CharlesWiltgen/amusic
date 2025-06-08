@@ -1,12 +1,13 @@
+// @ts-nocheck
 import {
   assert,
   assertEquals,
   assertExists,
   assertNotEquals,
   assertStringIncludes,
-} from "std/assert/mod.ts";
-import { basename, join, resolve } from "std/path/mod.ts";
-import { copy, ensureDir, exists } from "std/fs/mod.ts";
+} from "jsr:@std/assert";
+import { basename, join, resolve } from "jsr:@std/path";
+import { copy, ensureDir, exists } from "jsr:@std/fs";
 
 const AMUSIC_SCRIPT_PATH = "./amusic.ts"; // Relative to repo root
 
