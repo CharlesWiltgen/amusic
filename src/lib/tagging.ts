@@ -1,4 +1,5 @@
 import { parse as parsePath } from "jsr:@std/path";
+import { getVendorBinaryPath } from "./vendor_tools.ts";
 
 // AcoustID metadata field names for different container formats
 const ACOUSTID_FIELDS = {
@@ -20,11 +21,91 @@ const ACOUSTID_FIELDS = {
 } as const;
 
 /**
- * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file using ffmpeg.
+ * Writes AcoustID tags to MP4/M4A files using AtomicParsley.
+ * This handles the iTunes-style freeform atoms properly.
+ */
+async function writeAcoustIDTagsMP4(
+  filePath: string,
+  fingerprint: string,
+  acoustID: string,
+): Promise<boolean> {
+  try {
+    const atomicParsleyPath = getVendorBinaryPath("atomicparsley");
+    
+    // AtomicParsley modifies files in-place, so we need to work on a copy
+    const fileMeta = parsePath(filePath);
+    const tempDir = await Deno.makeTempDir({ prefix: "amusic_mp4_tagging_" });
+    const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
+    
+    try {
+      // Copy the original file to temp location
+      await Deno.copyFile(filePath, tempFilePath);
+      
+      // Use AtomicParsley to write iTunes-style freeform atoms
+      // Format: --rDNSatom "data_value" name=atom_name domain=reverse_domain
+      const apCmd = new Deno.Command(atomicParsleyPath, {
+        args: [
+          tempFilePath,
+          "--rDNSatom",
+          fingerprint,
+          "name=Acoustid Fingerprint",
+          "domain=com.apple.iTunes",
+          "--rDNSatom", 
+          acoustID,
+          "name=Acoustid Id",
+          "domain=com.apple.iTunes",
+          "--overWrite", // Modify file in place
+        ],
+        stdout: "piped",
+        stderr: "piped",
+      });
+      
+      const { code, stderr } = await apCmd.output();
+      if (code !== 0) {
+        const errorOutput = new TextDecoder().decode(stderr);
+        console.error(`  AtomicParsley error: ${errorOutput}`);
+        return false;
+      }
+      
+      // Replace original file with tagged version
+      try {
+        await Deno.rename(tempFilePath, filePath);
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("Cross-device link")) {
+          try {
+            await Deno.copyFile(tempFilePath, filePath);
+            return true;
+          } catch (copyErr) {
+            const copyMsg = copyErr instanceof Error ? copyErr.message : String(copyErr);
+            console.error(`Error copying tagged MP4 file across devices: ${copyMsg}`);
+            return false;
+          }
+        }
+        console.error(`Error replacing original MP4 file with tagged version: ${msg}`);
+        return false;
+      }
+      
+    } finally {
+      // Clean up temp directory
+      await Deno.remove(tempDir, { recursive: true }).catch((e) =>
+        console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`)
+      );
+    }
+    
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error(`Error during MP4 tagging with AtomicParsley: ${errorMessage}`);
+    return false;
+  }
+}
+
+/**
+ * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file.
  * 
- * NOTE: MP4/M4A containers have limited support for custom metadata fields in ffmpeg.
- * AcoustID tags may not be written properly to MP4 files. ReplayGain tags will be preserved.
- * For proper MP4 AcoustID tagging, consider using tools like AtomicParsley or mp4v2.
+ * Uses AtomicParsley for MP4/M4A files to write proper iTunes-style freeform atoms.
+ * Uses ffmpeg for other formats (FLAC, MP3, Ogg) with format-appropriate metadata fields.
  *
  * @param filePath Path to the audio file to tag.
  * @param fingerprint The fingerprint to embed.
@@ -46,14 +127,9 @@ export async function writeAcoustIDTags(
     let ffmpegArgs: string[];
     
     if (ext === ".mp4" || ext === ".m4a" || ext === ".mov") {
-      // MP4 containers have poor support for custom metadata in ffmpeg
-      console.log("  WARNING: MP4/M4A files do not support AcoustID tagging with current tools");
-      console.log("  INFO: Skipping AcoustID tag writing to preserve existing metadata");
-      console.log("  SUGGESTION: Use FLAC format for full AcoustID support, or install AtomicParsley");
-      
-      // Skip writing AcoustID tags to MP4 files to avoid corrupting metadata
-      // Just return success since the fingerprint was generated successfully
-      return true;
+      // Use AtomicParsley for proper MP4 metadata handling
+      console.log("  INFO: Using AtomicParsley for MP4 metadata writing...");
+      return await writeAcoustIDTagsMP4(filePath, fingerprint, acoustID);
     } else if (ext === ".mp3") {
       // For MP3 files, use ID3 field names (ffmpeg converts to TXXX frames)
       ffmpegArgs = [

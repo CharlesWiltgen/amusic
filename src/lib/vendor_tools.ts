@@ -2,10 +2,10 @@ import { dirname, fromFileUrl, join } from "jsr:@std/path";
 
 /**
  * Determine the platform-specific vendor binary path for the given tool.
- * Supports 'fpcalc' and 'rsgain'.
+ * Supports 'fpcalc', 'rsgain', and 'atomicparsley'.
  */
 export function getVendorBinaryPath(
-  tool: "fpcalc" | "rsgain",
+  tool: "fpcalc" | "rsgain" | "atomicparsley",
 ): string {
   const os = Deno.build.os; // 'darwin', 'linux', 'windows'
   const arch = Deno.build.arch; // e.g., 'x86_64', 'aarch64'
@@ -33,7 +33,15 @@ export function getVendorBinaryPath(
   const platformDir = `${vendorOs}-${vendorArch}`;
   const baseDir = dirname(fromFileUrl(import.meta.url));
   const toolDir = join(baseDir, "../vendor", platformDir, tool);
-  const binaryName = tool + (os === "windows" ? ".exe" : "");
+  
+  // AtomicParsley uses different casing for the binary name
+  let binaryName: string;
+  if (tool === "atomicparsley") {
+    binaryName = "AtomicParsley" + (os === "windows" ? ".exe" : "");
+  } else {
+    binaryName = tool + (os === "windows" ? ".exe" : "");
+  }
+  
   const vendorPath = join(toolDir, binaryName);
   // Ensure the vendor binary exists; fail if missing
   try {

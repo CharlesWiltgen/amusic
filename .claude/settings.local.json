@@ -7,7 +7,12 @@
       "Bash(ffprobe:*)",
       "Bash(src/vendor/rsgain-3.6-macos-arm64/rsgain --help)",
       "Bash(src/vendor/macos-arm64/rsgain/rsgain --help)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley --version)",
+      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley --help)",
+      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley --reverseDNS-help)",
+      "Bash(deno run:*)",
+      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley:*)"
     ],
     "deny": []
   }
