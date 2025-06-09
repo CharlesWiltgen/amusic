@@ -3,12 +3,27 @@ import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
-import { extname, join } from "jsr:@std/path";
+import { extname, join, dirname, fromFileUrl } from "jsr:@std/path";
+// Auto-load environment variables from a .env file located alongside this script (allows ACOUSTID_API_KEY in .env)
+import { loadSync } from "jsr:@std/dotenv";
+import { parse } from "jsr:@std/flags";
+const __dirname = dirname(fromFileUrl(import.meta.url));
+// Load .env from script directory if running from that directory
+try {
+  if (Deno.cwd() === __dirname) {
+    loadSync({ export: true, envPath: join(__dirname, ".env") });
+  }
+} catch {
+  // ignore missing or invalid .env
+}
 
-// Auto-load environment variables from .env (allows ACOUSTID_API_KEY in .env file)
-import "jsr:@std/dotenv/load";
-
-const SUPPORTED_EXTENSIONS = ["m4a"];
+const SUPPORTED_EXTENSIONS = [
+  "mp3",
+  "flac",
+  "ogg",
+  "m4a",
+  "wav",
+];
 
 /**
  * Checks if a command is available in the system PATH.
@@ -49,6 +64,141 @@ if (import.meta.main) {
     showTags?: boolean;
     dryRun?: boolean;
     apiKey?: string;
+  }
+
+  // Basic mode: fallback when not using 'easy' subcommand
+  if (Deno.args[0] !== "easy") {
+    const parsed = parse(Deno.args, {
+      boolean: ["force", "quiet", "show-tags", "dry-run"],
+      string: ["api-key"],
+      alias: { f: "force", q: "quiet" },
+      default: { quiet: false, force: false, "dry-run": false },
+    });
+    const options: CommandOptions = {
+      force: parsed.force,
+      quiet: parsed.quiet,
+      showTags: parsed["show-tags"],
+      dryRun: parsed["dry-run"],
+      apiKey: parsed["api-key"] ?? Deno.env.get("ACOUSTID_API_KEY") ?? "",
+    };
+    const files = parsed._.map(String);
+    let filesToProcess: string[] = [];
+    for (const fileOrDir of files) {
+      const ext = extname(fileOrDir).toLowerCase().slice(1);
+      if (SUPPORTED_EXTENSIONS.includes(ext)) {
+        filesToProcess.push(fileOrDir);
+      } else {
+        try {
+          for await (const entry of Deno.readDir(fileOrDir)) {
+            if (entry.isFile) {
+              const entryExt = extname(entry.name).toLowerCase().slice(1);
+              if (SUPPORTED_EXTENSIONS.includes(entryExt)) {
+                filesToProcess.push(join(fileOrDir, entry.name));
+              }
+            }
+          }
+        } catch {
+          console.error(
+            `Warning: Path "${fileOrDir}" not found or inaccessible; skipping.`,
+          );
+        }
+      }
+    }
+    if (options.showTags) {
+      if (!options.quiet) console.log("Displaying existing AcoustID tags:");
+      for (const file of filesToProcess) {
+        try {
+          await ensureCommandExists("ffprobe");
+          const tags = await getAcousticIDTags(file);
+          if (tags) {
+            console.log(`\nFile: ${file}`);
+            console.log(
+              `  ACOUSTID_ID: ${tags.ACOUSTID_ID || "Not found"}`,
+            );
+            console.log(
+              `  ACOUSTID_FINGERPRINT: ${
+                tags.ACOUSTID_FINGERPRINT || "Not found"
+              }`,
+            );
+          } else {
+            console.log(`\nFile: ${file}`);
+            console.log("  No AcoustID tags found.");
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error
+            ? error.message
+            : String(error);
+          console.error(`Error reading tags for ${file}: ${errorMessage}`);
+        }
+      }
+      Deno.exit(0);
+    }
+    if (!options.apiKey) {
+      if (!options.quiet) {
+        console.warn(
+          "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
+        );
+      }
+    }
+    if (!options.quiet) {
+      console.log(`Processing ${filesToProcess.length} file(s)...`);
+      if (options.apiKey) {
+        console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
+      }
+    }
+    let processedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    let lookupFailedCount = 0;
+    let noResultsCount = 0;
+    for (const file of filesToProcess) {
+      try {
+        if (!options.quiet && filesToProcess.length > 1) console.log("");
+        const status = await processAcoustIDTagging(
+          file,
+          options.apiKey ?? "",
+          options.force || false,
+          options.quiet || false,
+          options.dryRun || false,
+        );
+        switch (status) {
+          case "processed":
+            processedCount++;
+            break;
+          case "skipped":
+            skippedCount++;
+            break;
+          case "failed":
+            failedCount++;
+            break;
+          case "lookup_failed":
+            lookupFailedCount++;
+            break;
+          case "no_results":
+            noResultsCount++;
+            break;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : String(error);
+        console.error(`Unexpected error processing ${file}: ${errorMessage}`);
+        failedCount++;
+      }
+    }
+    console.log("\n--- Processing Complete ---");
+    console.log(`Successfully processed: ${processedCount}`);
+    console.log(`Skipped (already tagged/force not used): ${skippedCount}`);
+    console.log(`No AcoustID results found: ${noResultsCount}`);
+    console.log(
+      `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
+    );
+    console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
+    console.log("---------------------------");
+    if (options.dryRun) {
+      console.log("\nNOTE: This was a dry run. No files were modified.");
+    }
+    Deno.exit(0);
   }
 
   const program = new Command()

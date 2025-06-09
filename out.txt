@@ -1,0 +1,21 @@
+[0m[33mWarning[0m the configuration file "file:///Users/Charles/Projects/amusic/deno.json" contains an entry for "importMap" that is being ignored.
+
+[1mUsage:[22m   [95mamusic[39m
+[1mVersion:[22m [33m0.1.0[39m 
+
+[1mDescription:[22m
+
+  Calculate ReplayGain and embed AcousticID fingerprints and IDs.
+
+[1mOptions:[22m
+
+  [94m-h[39m, [94m--help[39m     [31m[1m-[22m[39m Show this help.                            
+  [94m-V[39m, [94m--version[39m  [31m[1m-[22m[39m Show the version number for this program.  
+
+[1mCommands:[22m
+
+  [94measy[39m  [33m<[39m[95mfiles...[39m[33m>[39m  [31m[1m-[22m[39m Calculate ReplayGain and AcousticID for each album in a library root directory
+                      (each album in its own folder).                                               
+
+[31m  [1merror[22m: Unknown command "mp3_sample_512kb.mp3". Did you mean command "easy"?
+[39m
