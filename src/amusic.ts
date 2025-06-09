@@ -8,11 +8,9 @@ import { extname, join, dirname, fromFileUrl } from "jsr:@std/path";
 import { loadSync } from "jsr:@std/dotenv";
 import { parse } from "jsr:@std/flags";
 const __dirname = dirname(fromFileUrl(import.meta.url));
-// Load .env from script directory if running from that directory
+// Load environment variables from a .env file located alongside this script (e.g. ACOUSTID_API_KEY)
 try {
-  if (Deno.cwd() === __dirname) {
-    loadSync({ export: true, envPath: join(__dirname, ".env") });
-  }
+  loadSync({ export: true, envPath: join(__dirname, ".env") });
 } catch {
   // ignore missing or invalid .env
 }

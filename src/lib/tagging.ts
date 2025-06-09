@@ -26,6 +26,8 @@ export async function writeAcoustIDTags(
         filePath,
         "-c",
         "copy",
+        "-movflags",
+        "+use_metadata_tags",
         "-metadata",
         `ACOUSTID_FINGERPRINT=${fingerprint}`,
         "-metadata",
