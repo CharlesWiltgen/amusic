@@ -3,7 +3,7 @@ import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
-import { extname, join, dirname, fromFileUrl } from "jsr:@std/path";
+import { dirname, extname, fromFileUrl, join } from "jsr:@std/path";
 // Auto-load environment variables from a .env file located alongside this script (allows ACOUSTID_API_KEY in .env)
 import { loadSync } from "jsr:@std/dotenv";
 import { parse } from "jsr:@std/flags";
@@ -130,6 +130,29 @@ if (import.meta.main) {
         }
       }
       Deno.exit(0);
+    }
+
+    // If a single directory was provided, first calculate and embed ReplayGain for that album
+    if (files.length === 1) {
+      const dirPath = files[0];
+      try {
+        const stat = await Deno.stat(dirPath);
+        if (stat.isDirectory) {
+          if (!options.quiet) {
+            console.log(
+              `\nACTION: Calculating ReplayGain for album: ${dirPath}`,
+            );
+          }
+          const ok = await calculateReplayGain(dirPath, options.quiet);
+          if (!ok) {
+            console.error(
+              `  ERROR: ReplayGain calculation failed for album "${dirPath}".`,
+            );
+          }
+        }
+      } catch {
+        // not a single directory input; skip ReplayGain
+      }
     }
     if (!options.apiKey) {
       if (!options.quiet) {

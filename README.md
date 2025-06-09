@@ -165,6 +165,13 @@ files successfully processed, skipped, and failed.
    deno run --allow-read --allow-run --allow-write --allow-env amusic.ts "./path/to/your/music file.mp3"
    ```
 
+1a. **Process an album directory:** Calculate and embed ReplayGain metadata and
+generate AcoustID fingerprints for all tracks in a single folder:
+
+```bash
+deno run --allow-read --allow-run --allow-write --allow-env amusic.ts "/path/to/album_folder"
+```
+
 2. **Process multiple files, one of them with forced overwrite:**
 
    ```bash
