@@ -1,7 +1,30 @@
 import { parse as parsePath } from "jsr:@std/path";
 
+// AcoustID metadata field names for different container formats
+const ACOUSTID_FIELDS = {
+  // MP4/M4A containers use iTunes-style freeform atoms
+  MP4: {
+    FINGERPRINT: "----:com.apple.iTunes:Acoustid Fingerprint",
+    ID: "----:com.apple.iTunes:Acoustid Id",
+  },
+  // FLAC, Ogg, and other formats use Vorbis-style field names
+  VORBIS: {
+    FINGERPRINT: "ACOUSTID_FINGERPRINT",
+    ID: "ACOUSTID_ID",
+  },
+  // MP3 files would use TXXX frames (handled differently by ffmpeg)
+  ID3: {
+    FINGERPRINT: "ACOUSTID_FINGERPRINT", // ffmpeg handles TXXX conversion
+    ID: "ACOUSTID_ID",
+  },
+} as const;
+
 /**
  * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file using ffmpeg.
+ * 
+ * NOTE: MP4/M4A containers have limited support for custom metadata fields in ffmpeg.
+ * AcoustID tags may not be written properly to MP4 files. ReplayGain tags will be preserved.
+ * For proper MP4 AcoustID tagging, consider using tools like AtomicParsley or mp4v2.
  *
  * @param filePath Path to the audio file to tag.
  * @param fingerprint The fingerprint to embed.
@@ -18,32 +41,40 @@ export async function writeAcoustIDTags(
   try {
     const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
 
-    // Handle MP4/M4A files differently due to metadata limitations
+    // Use correct metadata format for each container type
     const ext = fileMeta.ext.toLowerCase();
     let ffmpegArgs: string[];
     
     if (ext === ".mp4" || ext === ".m4a" || ext === ".mov") {
-      // For MP4 containers, try using global metadata options
+      // MP4 containers have poor support for custom metadata in ffmpeg
+      console.log("  WARNING: MP4/M4A files do not support AcoustID tagging with current tools");
+      console.log("  INFO: Skipping AcoustID tag writing to preserve existing metadata");
+      console.log("  SUGGESTION: Use FLAC format for full AcoustID support, or install AtomicParsley");
+      
+      // Skip writing AcoustID tags to MP4 files to avoid corrupting metadata
+      // Just return success since the fingerprint was generated successfully
+      return true;
+    } else if (ext === ".mp3") {
+      // For MP3 files, use ID3 field names (ffmpeg converts to TXXX frames)
       ffmpegArgs = [
         "-loglevel", "error",
         "-i", filePath,
         "-map", "0",
         "-c", "copy",
         "-map_metadata", "0",
-        "-movflags", "+use_metadata_tags",
-        "-metadata:g", `ACOUSTID_FINGERPRINT=${fingerprint}`,
-        "-metadata:g", `ACOUSTID_ID=${acoustID}`,
+        "-metadata", `${ACOUSTID_FIELDS.ID3.FINGERPRINT}=${fingerprint}`,
+        "-metadata", `${ACOUSTID_FIELDS.ID3.ID}=${acoustID}`,
       ];
     } else {
-      // For other formats, use standard metadata approach
+      // For FLAC, Ogg, and other formats, use Vorbis-style field names
       ffmpegArgs = [
         "-loglevel", "error",
         "-i", filePath,
         "-map", "0",
         "-c", "copy",
         "-map_metadata", "0",
-        "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
-        "-metadata", `ACOUSTID_ID=${acoustID}`,
+        "-metadata", `${ACOUSTID_FIELDS.VORBIS.FINGERPRINT}=${fingerprint}`,
+        "-metadata", `${ACOUSTID_FIELDS.VORBIS.ID}=${acoustID}`,
       ];
     }
     
