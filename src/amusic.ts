@@ -3,7 +3,9 @@ import { Command } from "@cliffy/command";
 import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
-import { join } from "jsr:@std/path";
+import { extname, join } from "jsr:@std/path";
+
+const SUPPORTED_EXTENSIONS = ["m4a"];
 
 /**
  * Checks if a command is available in the system PATH.
@@ -188,14 +190,39 @@ if (import.meta.main) {
       "AcoustID API key (required for lookups).",
       { override: true },
     )
-    .arguments("<files:string...>")
+    .arguments("<...files:string>")
     .action(async (options: CommandOptions, ...files: string[]) => {
+      let filesToProcess: string[] = [];
+      for (const fileOrDir of files) {
+        try {
+          const info = await Deno.stat(fileOrDir);
+          if (info.isDirectory) {
+            for await (const entry of Deno.readDir(fileOrDir)) {
+              if (entry.isFile) {
+                const ext = extname(entry.name).toLowerCase().slice(1);
+                if (SUPPORTED_EXTENSIONS.includes(ext)) {
+                  filesToProcess.push(join(fileOrDir, entry.name));
+                }
+              }
+            }
+          } else {
+            const ext = extname(fileOrDir).toLowerCase().slice(1);
+            if (SUPPORTED_EXTENSIONS.includes(ext)) {
+              filesToProcess.push(fileOrDir);
+            }
+          }
+        } catch {
+          console.error(
+            `Warning: Path "${fileOrDir}" not found or inaccessible; skipping.`,
+          );
+        }
+      }
       // Handle --show-tags
       if (options.showTags) {
         if (!options.quiet) {
           console.log("Displaying existing AcoustID tags:");
         }
-        for (const file of files) {
+        for (const file of filesToProcess) {
           try {
             await ensureCommandExists("ffprobe");
             const tags = await getAcousticIDTags(file);
@@ -232,7 +259,7 @@ if (import.meta.main) {
       }
 
       if (!options.quiet) {
-        console.log(`Processing ${files.length} file(s)...`);
+        console.log(`Processing ${filesToProcess.length} file(s)...`);
         if (options.apiKey) {
           console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
         }
@@ -244,9 +271,9 @@ if (import.meta.main) {
       let lookupFailedCount = 0;
       let noResultsCount = 0;
 
-      for (const file of files) {
+      for (const file of filesToProcess) {
         try {
-          if (!options.quiet && files.length > 1) console.log("");
+          if (!options.quiet && filesToProcess.length > 1) console.log("");
           const status = await processAcoustIDTagging(
             file,
             options.apiKey ?? "",

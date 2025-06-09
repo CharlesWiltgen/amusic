@@ -34,5 +34,17 @@ export function getVendorBinaryPath(
   const baseDir = dirname(fromFileUrl(import.meta.url));
   const toolDir = join(baseDir, "../vendor", platformDir, tool);
   const binaryName = tool + (os === "windows" ? ".exe" : "");
-  return join(toolDir, binaryName);
+  const vendorPath = join(toolDir, binaryName);
+  try {
+    const info = Deno.statSync(vendorPath);
+    if (info.isFile) {
+      return vendorPath;
+    }
+  } catch {
+    // Vendor binary not present; fall back to system-installed tool
+  }
+  console.warn(
+    `Vendor binary for "${tool}" not found at "${vendorPath}"; falling back to "${binaryName}" from PATH.`,
+  );
+  return binaryName;
 }

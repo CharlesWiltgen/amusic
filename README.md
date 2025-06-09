@@ -104,6 +104,12 @@ brew install ffmpeg
    deno task build
    ```
 
+> **Note (macOS)**\
+> The build task will automatically remove any quarantine attributes and perform
+> an ad-hoc code signing of the generated `dist/amusic` binary so that the
+> embedded vendor tools (`fpcalc`/`rsgain`) can be executed without encountering
+> “No such file or directory (os error 2)”.
+
 ## Usage
 
 > **Note:** If you've built a standalone executable using `deno task build`, you
