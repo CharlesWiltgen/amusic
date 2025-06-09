@@ -467,6 +467,11 @@ Deno.test("Acoustid Tests", async (t) => {
         consoleErrorStub = undefined;
       }
       MockDenoCommand.commandMocks.set("ffmpeg", []); // Clear ffmpeg specific mocks
+      // Stub ffprobe to return empty tags so writeAcoustIDTags can reapply none
+      MockDenoCommand.commandMocks.set(
+        "ffprobe",
+        [{ code: 0, stdout: '{"format":{"tags":{}}}' }],
+      );
       MockDenoCommand.clearLastArgs(); // Clear stored arguments
     };
 
