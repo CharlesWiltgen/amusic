@@ -332,20 +332,19 @@ export async function processAcoustIDTagging(
   }
 
   let acoustIDToWrite = "";
+  let resultStatus: ProcessResultStatus = "processed";
   if (apiKey) {
     if (!quiet) {
       console.log("  ACTION: Looking up fingerprint with AcoustID API...");
     }
     const lookupResult = await lookupFingerprint(fingerprint, duration, apiKey);
-
     if (!lookupResult) {
+      resultStatus = "lookup_failed";
       if (!quiet) {
         console.log("  ERROR: AcoustID API lookup failed (null response).");
       }
-      return "lookup_failed";
-    }
-
-    if (lookupResult.status === "error") {
+    } else if (lookupResult.status === "error") {
+      resultStatus = "lookup_failed";
       if (!quiet) {
         console.log(
           `  ERROR: AcoustID API returned error: ${
@@ -353,20 +352,17 @@ export async function processAcoustIDTagging(
           }`,
         );
       }
-      return "lookup_failed";
-    }
-
-    if (!lookupResult.results || lookupResult.results.length === 0) {
+    } else if (!lookupResult.results || lookupResult.results.length === 0) {
+      resultStatus = "no_results";
       if (!quiet) {
         console.log(
           "  INFO: No results found from AcoustID API for this fingerprint.",
         );
       }
-      return "no_results";
+    } else {
+      acoustIDToWrite = lookupResult.results[0].id;
+      if (!quiet) console.log(`    Found AcoustID: ${acoustIDToWrite}`);
     }
-
-    acoustIDToWrite = lookupResult.results[0].id;
-    if (!quiet) console.log(`    Found AcoustID: ${acoustIDToWrite}`);
   } else {
     if (!quiet) {
       console.log(
@@ -384,7 +380,7 @@ export async function processAcoustIDTagging(
       );
       console.log("  DRY RUN: Skipping actual tag writing.");
     }
-    return "processed"; // Report as processed for dry run
+    return resultStatus;
   }
 
   if (!quiet) {
@@ -400,9 +396,8 @@ export async function processAcoustIDTagging(
 
   if (success) {
     if (!quiet) console.log("  SUCCESS: AcoustID fingerprint tag processed.");
-    return "processed";
-  } else {
-    if (!quiet) console.log("  ERROR: Failed to write AcoustID tags.");
-    return "failed";
+    return resultStatus;
   }
+  if (!quiet) console.log("  ERROR: Failed to write AcoustID tags.");
+  return "failed";
 }
