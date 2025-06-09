@@ -5,6 +5,9 @@ import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
 import { extname, join } from "jsr:@std/path";
 
+// Auto-load environment variables from .env (allows ACOUSTID_API_KEY in .env file)
+import "jsr:@std/dotenv/load";
+
 const SUPPORTED_EXTENSIONS = ["m4a"];
 
 /**
@@ -77,6 +80,7 @@ if (import.meta.main) {
     .option(
       "--api-key <key:string>",
       "AcoustID API key (required for lookups).",
+      { default: Deno.env.get("ACOUSTID_API_KEY") },
     )
     .action(async (options: CommandOptions, library: string) => {
       if (!options.apiKey) {
@@ -188,7 +192,7 @@ if (import.meta.main) {
     .option(
       "--api-key <key:string>",
       "AcoustID API key (required for lookups).",
-      { override: true },
+      { default: Deno.env.get("ACOUSTID_API_KEY"), override: true },
     )
     .arguments("<...files:string>")
     .action(async (options: CommandOptions, ...files: string[]) => {

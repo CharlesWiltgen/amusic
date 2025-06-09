@@ -39,7 +39,7 @@ export interface ResultItem {
 }
 
 export interface LookupResult {
-  status: "ok" | "error";
+  status?: "ok" | "error";
   results?: ResultItem[];
   error?: AcoustIDApiError; // Present if status is "error"
 }
@@ -143,7 +143,7 @@ export async function generateFingerprint(
   // console.log("  Generating AcoustID fingerprint with fpcalc..."); // Moved to caller
   const fpcalcPath = getVendorBinaryPath("fpcalc");
   const command = new Deno.Command(fpcalcPath, {
-    args: ["-plain", filePath],
+    args: [filePath],
     stdout: "piped",
     stderr: "piped",
   });
@@ -158,10 +158,9 @@ export async function generateFingerprint(
   const match = output.match(/FINGERPRINT=([^\n]+)/);
   if (match && match[1]) {
     return match[1];
-  } else {
-    console.error("  Could not parse fingerprint from fpcalc output.");
-    return null;
   }
+  console.error("  Could not parse fingerprint from fpcalc output.");
+  return null;
 }
 
 /**
@@ -201,8 +200,8 @@ export async function lookupFingerprint(
       return null;
     }
     if (!data.results || data.results.length === 0) {
-      // console.log("  No results found in AcoustID lookup."); // This is a common case, not necessarily an error
-      return { status: "ok", results: [] }; // Return empty results to distinguish from an error
+      // No results found in AcoustID lookup.
+      return { results: [] };
     }
     return data as LookupResult;
   } catch (e) {

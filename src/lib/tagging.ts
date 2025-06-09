@@ -45,9 +45,24 @@ export async function writeAcoustIDTags(
       await Deno.rename(tempFilePath, filePath);
       return true;
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      // On cross-device filesystems, rename may fail with EXDEV; fallback to copy
+      if (msg.includes("Cross-device link")) {
+        try {
+          await Deno.copyFile(tempFilePath, filePath);
+          return true;
+        } catch (copyErr) {
+          const copyMsg = copyErr instanceof Error
+            ? copyErr.message
+            : String(copyErr);
+          console.error(
+            `Error copying tagged file across devices: ${copyMsg}`,
+          );
+          return false;
+        }
+      }
       console.error(
-        `Error replacing original file with tagged version: ${errorMessage}`,
+        `Error replacing original file with tagged version: ${msg}`,
       );
       return false;
     }
