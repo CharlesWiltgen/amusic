@@ -327,8 +327,6 @@ export async function processAcoustIDTagging(
         `WARNING: Could not determine audio duration due to ffprobe error: ${errorMessage}. AcoustID lookup might be less accurate or fail.`,
       );
     }
-    // Return 'failed' as duration is needed for lookup and its absence/error could cause issues
-    return "failed";
   }
 
   let acoustIDToWrite = "";
