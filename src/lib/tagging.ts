@@ -24,6 +24,8 @@ export async function writeAcoustIDTags(
         "error",
         "-i",
         filePath,
+        "-map",
+        "0",
         "-map_metadata",
         "0",
         "-c",

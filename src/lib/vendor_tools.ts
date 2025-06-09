@@ -35,16 +35,17 @@ export function getVendorBinaryPath(
   const toolDir = join(baseDir, "../vendor", platformDir, tool);
   const binaryName = tool + (os === "windows" ? ".exe" : "");
   const vendorPath = join(toolDir, binaryName);
+  // Ensure the vendor binary exists; fail if missing
   try {
     const info = Deno.statSync(vendorPath);
     if (info.isFile) {
       return vendorPath;
     }
   } catch {
-    // Vendor binary not present; fall back to system-installed tool
+    // vendorPath stat failed
   }
-  console.warn(
-    `Vendor binary for "${tool}" not found at "${vendorPath}"; falling back to "${binaryName}" from PATH.`,
+  throw new Error(
+    `Vendored binary for "${tool}" not found at "${vendorPath}". ` +
+    `Please ensure the vendor/${platformDir}/${tool}${os === "windows" ? ".exe" : ""} binary is present.`,
   );
-  return binaryName;
 }
