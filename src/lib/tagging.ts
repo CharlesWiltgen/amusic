@@ -18,58 +18,66 @@ export async function writeAcoustIDTags(
   try {
     const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
 
-    const command = new Deno.Command("ffmpeg", {
-      args: [
-        "-loglevel",
-        "error",
-        "-i",
-        filePath,
-        "-map",
-        "0",
-        "-map_metadata",
-        "0",
-        "-c",
-        "copy",
-        "-movflags",
-        "+use_metadata_tags",
-        "-metadata",
-        `ACOUSTID_FINGERPRINT=${fingerprint}`,
-        "-metadata",
-        `ACOUSTID_ID=${acoustID}`,
-        tempFilePath,
-      ],
-      stderr: "piped",
-    });
-    const { code, stderr } = await command.output();
-
-    if (code !== 0) {
-      console.error(`  ffmpeg error: ${new TextDecoder().decode(stderr)}`);
-      return false;
+    // Extract all existing metadata to a temporary ffmetadata file
+    const metaFilePath = `${tempDir}/ffmetadata.txt`;
+    {
+      const extract = new Deno.Command("ffmpeg", {
+        args: ["-loglevel", "error", "-i", filePath, "-f", "ffmetadata", metaFilePath],
+        stderr: "piped",
+      });
+      const { code, stderr } = await extract.output();
+      if (code !== 0) {
+        console.error(`  ffmpeg metadata extract error: ${new TextDecoder().decode(stderr)}`);
+        return false;
+      }
     }
 
+    // Append fingerprint tags to the metadata file
+    const tagLines = `
+ACOUSTID_FINGERPRINT=${fingerprint}
+ACOUSTID_ID=${acoustID}
+`;
+    await Deno.writeTextFile(metaFilePath, tagLines, { append: true });
+
+    // Remux with updated metadata, preserving all streams and metadata
+    {
+      const remux = new Deno.Command("ffmpeg", {
+        args: [
+          "-loglevel", "error",
+          "-i", filePath,
+          "-i", metaFilePath,
+          "-map", "0",
+          "-map_metadata", "1",
+          "-c", "copy",
+          "-movflags", "+use_metadata_tags",
+          tempFilePath,
+        ],
+        stderr: "piped",
+      });
+      const { code, stderr } = await remux.output();
+      if (code !== 0) {
+        console.error(`  ffmpeg remux error: ${new TextDecoder().decode(stderr)}`);
+        return false;
+      }
+    }
+
+    // Replace original file (rename or copy across devices)
     try {
       await Deno.rename(tempFilePath, filePath);
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // On cross-device filesystems, rename may fail with EXDEV; fallback to copy
       if (msg.includes("Cross-device link")) {
         try {
           await Deno.copyFile(tempFilePath, filePath);
           return true;
         } catch (copyErr) {
-          const copyMsg = copyErr instanceof Error
-            ? copyErr.message
-            : String(copyErr);
-          console.error(
-            `Error copying tagged file across devices: ${copyMsg}`,
-          );
+          const copyMsg = copyErr instanceof Error ? copyErr.message : String(copyErr);
+          console.error(`Error copying tagged file across devices: ${copyMsg}`);
           return false;
         }
       }
-      console.error(
-        `Error replacing original file with tagged version: ${msg}`,
-      );
+      console.error(`Error replacing original file with tagged version: ${msg}`);
       return false;
     }
   } finally {
