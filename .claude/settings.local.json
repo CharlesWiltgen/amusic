@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(gh pr list:*)",
+      "Bash(find:*)",
+      "Bash(ffprobe:*)",
+      "Bash(src/vendor/rsgain-3.6-macos-arm64/rsgain --help)",
+      "Bash(src/vendor/macos-arm64/rsgain/rsgain --help)"
+    ],
+    "deny": []
+  }
+}

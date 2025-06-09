@@ -18,49 +18,39 @@ export async function writeAcoustIDTags(
   try {
     const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
 
-    // Read all existing format-level tags via ffprobe so we can reapply them
-    let existingTags: Record<string, string> = {};
-    try {
-      const probe = new Deno.Command("ffprobe", {
-        args: [
-          "-v", "quiet",
-          "-print_format", "json",
-          "-show_entries", "format_tags",
-          filePath,
-        ],
-        stdout: "piped",
-        stderr: "piped",
-      });
-      const { code: probeCode, stdout: probeOut } = await probe.output();
-      if (probeCode === 0) {
-        const info = JSON.parse(new TextDecoder().decode(probeOut));
-        existingTags = info.format?.tags ?? {};
-      }
-    } catch {
-      // ignore ffprobe/tag read errors
-    }
-
-    // Build metadata arguments: reapply all existing tags, then our AcoustID tags
-    const metadataArgs: string[] = [];
-    for (const [key, val] of Object.entries(existingTags)) {
-      metadataArgs.push("-metadata", `${key}=${val}`);
-    }
-    metadataArgs.push(
-      "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
-      "-metadata", `ACOUSTID_ID=${acoustID}`,
-    );
-
-    // Remux audio + updated metadata back into the file, preserving all streams
-    const ffmpegCmd = new Deno.Command("ffmpeg", {
-      args: [
+    // Handle MP4/M4A files differently due to metadata limitations
+    const ext = fileMeta.ext.toLowerCase();
+    let ffmpegArgs: string[];
+    
+    if (ext === ".mp4" || ext === ".m4a" || ext === ".mov") {
+      // For MP4 containers, try using global metadata options
+      ffmpegArgs = [
         "-loglevel", "error",
         "-i", filePath,
         "-map", "0",
         "-c", "copy",
+        "-map_metadata", "0",
         "-movflags", "+use_metadata_tags",
-        ...metadataArgs,
-        tempFilePath,
-      ],
+        "-metadata:g", `ACOUSTID_FINGERPRINT=${fingerprint}`,
+        "-metadata:g", `ACOUSTID_ID=${acoustID}`,
+      ];
+    } else {
+      // For other formats, use standard metadata approach
+      ffmpegArgs = [
+        "-loglevel", "error",
+        "-i", filePath,
+        "-map", "0",
+        "-c", "copy",
+        "-map_metadata", "0",
+        "-metadata", `ACOUSTID_FINGERPRINT=${fingerprint}`,
+        "-metadata", `ACOUSTID_ID=${acoustID}`,
+      ];
+    }
+    
+    ffmpegArgs.push(tempFilePath);
+    
+    const ffmpegCmd = new Deno.Command("ffmpeg", {
+      args: ffmpegArgs,
       stderr: "piped",
     });
     {
