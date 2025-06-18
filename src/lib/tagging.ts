@@ -23,7 +23,7 @@ export async function getAcoustIDTags(
   try {
     // Read file data and open with taglib-wasm
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
 
@@ -69,10 +69,10 @@ export async function getAudioDuration(filePath: string): Promise<number> {
   try {
     // Read file data and open with taglib-wasm
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     const properties = audioFile.audioProperties();
-    return properties.length || 0;
+    return properties?.length || 0;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(
@@ -105,7 +105,7 @@ export async function writeAcoustIDTags(
   try {
     // Read file data and open with taglib-wasm
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     // Use the built-in AcoustID methods
     audioFile.setAcoustIdFingerprint(fingerprint);
@@ -157,7 +157,7 @@ export async function getReplayGainTags(
   let audioFile = null;
   try {
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     const tags: {
       trackGain?: number;
@@ -171,10 +171,10 @@ export async function getReplayGainTags(
     const albumGain = audioFile.getReplayGainAlbumGain();
     const albumPeak = audioFile.getReplayGainAlbumPeak();
 
-    if (trackGain !== undefined) tags.trackGain = trackGain;
-    if (trackPeak !== undefined) tags.trackPeak = trackPeak;
-    if (albumGain !== undefined) tags.albumGain = albumGain;
-    if (albumPeak !== undefined) tags.albumPeak = albumPeak;
+    if (trackGain !== undefined) tags.trackGain = parseFloat(trackGain);
+    if (trackPeak !== undefined) tags.trackPeak = parseFloat(trackPeak);
+    if (albumGain !== undefined) tags.albumGain = parseFloat(albumGain);
+    if (albumPeak !== undefined) tags.albumPeak = parseFloat(albumPeak);
 
     return Object.keys(tags).length > 0 ? tags : null;
   } catch (error) {
@@ -210,20 +210,20 @@ export async function writeReplayGainTags(
   let audioFile = null;
   try {
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     // Set ReplayGain values
     if (tags.trackGain !== undefined) {
-      audioFile.setReplayGainTrackGain(tags.trackGain);
+      audioFile.setReplayGainTrackGain(tags.trackGain.toString());
     }
     if (tags.trackPeak !== undefined) {
-      audioFile.setReplayGainTrackPeak(tags.trackPeak);
+      audioFile.setReplayGainTrackPeak(tags.trackPeak.toString());
     }
     if (tags.albumGain !== undefined) {
-      audioFile.setReplayGainAlbumGain(tags.albumGain);
+      audioFile.setReplayGainAlbumGain(tags.albumGain.toString());
     }
     if (tags.albumPeak !== undefined) {
-      audioFile.setReplayGainAlbumPeak(tags.albumPeak);
+      audioFile.setReplayGainAlbumPeak(tags.albumPeak.toString());
     }
 
     // Save the file
@@ -298,7 +298,7 @@ export async function getComprehensiveMetadata(
   let audioFile = null;
   try {
     const fileData = await Deno.readFile(filePath);
-    audioFile = await taglib.open(fileData, filePath);
+    audioFile = await taglib.open(fileData);
 
     const metadata: Record<string, unknown> = {};
 
@@ -314,10 +314,10 @@ export async function getComprehensiveMetadata(
 
     // Audio properties
     const props = audioFile.audioProperties();
-    if (props.length !== undefined) metadata.duration = props.length;
-    if (props.bitrate !== undefined) metadata.bitrate = props.bitrate;
-    if (props.sampleRate !== undefined) metadata.sampleRate = props.sampleRate;
-    if (props.channels !== undefined) metadata.channels = props.channels;
+    if (props?.length !== undefined) metadata.duration = props.length;
+    if (props?.bitrate !== undefined) metadata.bitrate = props.bitrate;
+    if (props?.sampleRate !== undefined) metadata.sampleRate = props.sampleRate;
+    if (props?.channels !== undefined) metadata.channels = props.channels;
 
     // Format
     const format = audioFile.getFormat();
@@ -341,16 +341,24 @@ export async function getComprehensiveMetadata(
 
     // ReplayGain
     const trackGain = audioFile.getReplayGainTrackGain();
-    if (trackGain !== undefined) metadata.replayGainTrackGain = trackGain;
+    if (trackGain !== undefined) {
+      metadata.replayGainTrackGain = parseFloat(trackGain);
+    }
 
     const trackPeak = audioFile.getReplayGainTrackPeak();
-    if (trackPeak !== undefined) metadata.replayGainTrackPeak = trackPeak;
+    if (trackPeak !== undefined) {
+      metadata.replayGainTrackPeak = parseFloat(trackPeak);
+    }
 
     const albumGain = audioFile.getReplayGainAlbumGain();
-    if (albumGain !== undefined) metadata.replayGainAlbumGain = albumGain;
+    if (albumGain !== undefined) {
+      metadata.replayGainAlbumGain = parseFloat(albumGain);
+    }
 
     const albumPeak = audioFile.getReplayGainAlbumPeak();
-    if (albumPeak !== undefined) metadata.replayGainAlbumPeak = albumPeak;
+    if (albumPeak !== undefined) {
+      metadata.replayGainAlbumPeak = parseFloat(albumPeak);
+    }
 
     // Cover art
     try {

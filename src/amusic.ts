@@ -379,8 +379,8 @@ if (import.meta.main) {
         if (!entry.isDirectory) continue;
         const albumDir = join(library, entry.name);
         if (!options.quiet) console.log(`\nProcessing album: ${albumDir}`);
-        const success = await calculateReplayGain(albumDir, options.quiet);
-        if (!success) {
+        const result = await calculateReplayGain(albumDir, options.quiet);
+        if (!result.success) {
           console.error(
             `  ERROR: ReplayGain calculation failed for album "${albumDir}". Skipping AcousticID tagging for this album.`,
           );

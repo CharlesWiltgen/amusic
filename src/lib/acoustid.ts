@@ -8,6 +8,11 @@ import {
 } from "./tagging.ts";
 export { getAcoustIDTags, hasAcoustIDTags, writeAcoustIDTags };
 
+export interface FpcalcResult {
+  fingerprint: string;
+  duration: number;
+}
+
 export interface AcoustIDApiError {
   message: string;
   code?: number; // Optional error code
@@ -58,7 +63,7 @@ export async function generateFingerprint(
   // console.log("  Generating AcoustID fingerprint with fpcalc..."); // Moved to caller
   const fpcalcPath = getVendorBinaryPath("fpcalc");
   const command = new Deno.Command(fpcalcPath, {
-    args: [filePath],
+    args: ["-json", filePath],
     stdout: "piped",
     stderr: "piped",
   });
@@ -69,13 +74,19 @@ export async function generateFingerprint(
     return null;
   }
 
-  const output = new TextDecoder().decode(stdout).trim();
-  const match = output.match(/FINGERPRINT=([^\n]+)/);
-  if (match && match[1]) {
-    return match[1];
+  try {
+    const output = new TextDecoder().decode(stdout).trim();
+    const result: FpcalcResult = JSON.parse(output);
+
+    if (result.fingerprint) {
+      return result.fingerprint;
+    }
+    console.error("  No fingerprint found in fpcalc JSON output.");
+    return null;
+  } catch (error) {
+    console.error(`  Could not parse fpcalc JSON output: ${error}`);
+    return null;
   }
-  console.error("  Could not parse fingerprint from fpcalc output.");
-  return null;
 }
 
 /**
