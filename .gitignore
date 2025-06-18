@@ -126,9 +126,8 @@ dist/
 
 # Temporary files from amusic.ts integration tests
 .test_run_files/
-
-# Temporary test audio files
-test_audio/
+tests/test_run_files/
+tests/test_audio/
 
 # Development/debug files
 scripts/dev/
