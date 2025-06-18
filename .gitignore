@@ -133,9 +133,7 @@ test_audio/
 # Development/debug files
 scripts/dev/
 
-# Claude Code guidance files
-CLAUDE.md
-CLAUDE.local.md
+# Claude Code guidance files  
 BACKLOG.md
 .claude/
 
