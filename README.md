@@ -43,7 +43,7 @@ option or by setting the `ACOUSTID_API_KEY` environment variable:
 export ACOUSTID_API_KEY=your_api_key_here
 
 # Then run without repeating the flag:
-deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts \
+deno run --allow-read --allow-run --allow-write --allow-env --allow-net src/amusic.ts \
   <file1> [file2 ...]
 ```
 
@@ -60,42 +60,22 @@ this may be supported in a future release.
 
 ## Dependencies
 
-The following command-line tools must be installed and available in the system's
-PATH (except for **fpcalc** and **rsgain**, which are provided in the `vendor`
-directory for supported platforms):
+`amusic` requires only Deno to run. All audio metadata operations are handled by the built-in taglib-wasm library, and the required external tools are included as vendor binaries:
 
 - **Deno**: The runtime for the script. Installation instructions can be found
   at [https://deno.land/](https://deno.land/).
-- **ffmpeg**: Used for reading and writing metadata to audio files.
-- **ffprobe**: Used for reading metadata from audio files (often included with
-  `ffmpeg`).
-- **fpcalc**: Used for generating AcoustID fingerprints. A native binary is
-  included in the `vendor` directory; no separate installation is required.
-- **rsgain**: Used for ReplayGain analysis and metadata tagging. A native binary
-  is included in the `vendor` directory; no separate installation is required.
+- **taglib-wasm**: Universal audio metadata library (included as npm dependency).
+  Handles all tag reading/writing operations for MP3, M4A/MP4, FLAC, OGG, WAV, and more.
+- **fpcalc**: Used for generating AcoustID fingerprints. Native binaries are
+  included in the `vendor` directory for all supported platforms.
+- **rsgain**: Used for ReplayGain analysis and metadata tagging. Native binaries are
+  included in the `vendor` directory for all supported platforms.
 
-The script actively checks for the presence of `ffmpeg`, `ffprobe`, and `fpcalc`
-at runtime using its `ensureCommandExists` function. Future work could explore
-WebAssembly (WASM) or pure JavaScript alternatives for `fpcalc` to minimize
-external binary dependencies and simplify the setup process for users.
-
-You can install the remaining dependencies (`ffmpeg`, `ffprobe`, and `rsgain`,
-if needed) using your system's package manager. For example, on Debian/Ubuntu:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ffmpeg
-```
-
-On macOS (using Homebrew):
-
-```bash
-brew install ffmpeg
-```
+No external tools need to be installed - everything is self-contained within the project.
 
 ## Installation
 
-1. Ensure Deno and the other dependencies (ffmpeg, ffprobe) are installed.
+1. Ensure Deno is installed.
 2. Clone this repository or download the `amusic.ts` script.
 3. (Optional) Build a standalone executable (includes the platform-specific
    vendor binaries):
@@ -126,16 +106,14 @@ process as arguments.
 **Syntax:**
 
 ```bash
-deno run --allow-read --allow-run --allow-write --allow-env amusic.ts [options] <file1> [file2 ...]
+deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts [options] <file1> [file2 ...]
 ```
 
-- `--allow-read`: Required to read audio files and check for system commands.
-- `--allow-run`: Required to execute external tools like `ffmpeg`, `ffprobe`,
-  and `fpcalc`.
-- `--allow-write`: Required to write updated audio files (if tags are
-  added/changed) and for temporary file creation by external tools.
-- `--allow-env`: Required for certain Deno operations like `Deno.makeTempDir`
-  and checking for system commands in PATH.
+- `--allow-read`: Required to read audio files.
+- `--allow-run`: Required to execute vendor binaries (`fpcalc` and `rsgain`).
+- `--allow-write`: Required to write updated audio files with new tags.
+- `--allow-env`: Required to read environment variables like `ACOUSTID_API_KEY`.
+- `--allow-net`: Required for AcoustID API lookups (optional, only needed when using API key).
 - `<file1> [file2 ...]`: One or more paths to audio files to be processed.
 
 **Options:**
@@ -162,38 +140,38 @@ files successfully processed, skipped, and failed.
 1. **Generate and add fingerprint to an audio file:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts "./path/to/your/music file.mp3"
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "./path/to/your/music file.mp3"
    ```
 
 1a. **Process an album directory:** Calculate and embed ReplayGain metadata and
 generate AcoustID fingerprints for all tracks in a single folder:
 
 ```bash
-deno run --allow-read --allow-run --allow-write --allow-env amusic.ts "/path/to/album_folder"
+deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "/path/to/album_folder"
 ```
 
 2. **Process multiple files, one of them with forced overwrite:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts --force "./path/to/your/music file.flac" "./another/audio.ogg"
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --force "./path/to/your/music file.flac" "./another/audio.ogg"
    ```
 
 3. **Process a file in quiet mode:**
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts --quiet "./path/to/quiet_process.mp3"
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --quiet "./path/to/quiet_process.mp3"
    ```
 
 4. **Perform a lookup using the environment variable (preferred):**
    ```bash
    export ACOUSTID_API_KEY=your_api_key_here
-   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts \
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts \
      ./path/to/your/music/file.mp3
    ```
 
 5. **Easy Mode: Process a music library organized by album folders. Calculates
    ReplayGain for each album and AcousticID for each track:**
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env amusic.ts easy /path/to/music/library --api-key $ACOUSTID_API_KEY
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts easy /path/to/music/library --api-key $ACOUSTID_API_KEY
    ```
 
 ## Contributing
