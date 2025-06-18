@@ -138,3 +138,6 @@ CLAUDE.md
 CLAUDE.local.md
 BACKLOG.md
 .claude/
+
+# Tool version management
+mise.toml
