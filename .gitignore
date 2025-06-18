@@ -139,3 +139,6 @@ BACKLOG.md
 
 # Tool version management
 mise.toml
+
+# VSCode workspace
+amusic.code-workspace
