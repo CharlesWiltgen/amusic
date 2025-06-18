@@ -1,111 +1,93 @@
-import { parse as parsePath } from "jsr:@std/path";
-import { getVendorBinaryPath } from "./vendor_tools.ts";
+import { TagLib } from "taglib-wasm";
 
-// AcoustID metadata field names for different container formats
-const ACOUSTID_FIELDS = {
-  // MP4/M4A containers use iTunes-style freeform atoms
-  MP4: {
-    FINGERPRINT: "----:com.apple.iTunes:Acoustid Fingerprint",
-    ID: "----:com.apple.iTunes:Acoustid Id",
-  },
-  // FLAC, Ogg, and other formats use Vorbis-style field names
-  VORBIS: {
-    FINGERPRINT: "ACOUSTID_FINGERPRINT",
-    ID: "ACOUSTID_ID",
-  },
-  // MP3 files would use TXXX frames (handled differently by ffmpeg)
-  ID3: {
-    FINGERPRINT: "ACOUSTID_FINGERPRINT", // ffmpeg handles TXXX conversion
-    ID: "ACOUSTID_ID",
-  },
-} as const;
+// TagLib instance - reuse for performance
+let taglibInstance: TagLib | null = null;
+
+async function ensureTagLib(): Promise<TagLib> {
+  if (!taglibInstance) {
+    taglibInstance = await TagLib.initialize();
+  }
+  return taglibInstance;
+}
 
 /**
- * Writes AcoustID tags to MP4/M4A files using AtomicParsley.
- * This handles the iTunes-style freeform atoms properly.
+ * Reads ACOUSTID_FINGERPRINT and ACOUSTID_ID tags from a file using Taglib-Wasm.
+ * Returns an object with the tags or null if not found or an error occurs.
  */
-async function writeAcoustIDTagsMP4(
+export async function getAcoustIDTags(
   filePath: string,
-  fingerprint: string,
-  acoustID: string,
-): Promise<boolean> {
+): Promise<{ ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } | null> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
   try {
-    const atomicParsleyPath = getVendorBinaryPath("atomicparsley");
-    
-    // AtomicParsley modifies files in-place, so we need to work on a copy
-    const fileMeta = parsePath(filePath);
-    const tempDir = await Deno.makeTempDir({ prefix: "amusic_mp4_tagging_" });
-    const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
-    
-    try {
-      // Copy the original file to temp location
-      await Deno.copyFile(filePath, tempFilePath);
-      
-      // Use AtomicParsley to write iTunes-style freeform atoms
-      // Format: --rDNSatom "data_value" name=atom_name domain=reverse_domain
-      const apCmd = new Deno.Command(atomicParsleyPath, {
-        args: [
-          tempFilePath,
-          "--rDNSatom",
-          fingerprint,
-          "name=Acoustid Fingerprint",
-          "domain=com.apple.iTunes",
-          "--rDNSatom", 
-          acoustID,
-          "name=Acoustid Id",
-          "domain=com.apple.iTunes",
-          "--overWrite", // Modify file in place
-        ],
-        stdout: "piped",
-        stderr: "piped",
-      });
-      
-      const { code, stderr } = await apCmd.output();
-      if (code !== 0) {
-        const errorOutput = new TextDecoder().decode(stderr);
-        console.error(`  AtomicParsley error: ${errorOutput}`);
-        return false;
-      }
-      
-      // Replace original file with tagged version
-      try {
-        await Deno.rename(tempFilePath, filePath);
-        return true;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (msg.includes("Cross-device link")) {
-          try {
-            await Deno.copyFile(tempFilePath, filePath);
-            return true;
-          } catch (copyErr) {
-            const copyMsg = copyErr instanceof Error ? copyErr.message : String(copyErr);
-            console.error(`Error copying tagged MP4 file across devices: ${copyMsg}`);
-            return false;
-          }
-        }
-        console.error(`Error replacing original MP4 file with tagged version: ${msg}`);
-        return false;
-      }
-      
-    } finally {
-      // Clean up temp directory
-      await Deno.remove(tempDir, { recursive: true }).catch((e) =>
-        console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`)
-      );
+    // Read file data and open with taglib-wasm
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
+
+    const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
+
+    // Use the built-in AcoustID methods
+    const fingerprint = audioFile.getAcoustIdFingerprint();
+    const id = audioFile.getAcoustIdId();
+
+    if (fingerprint) {
+      tags.ACOUSTID_FINGERPRINT = fingerprint;
     }
-    
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    console.error(`Error during MP4 tagging with AtomicParsley: ${errorMessage}`);
-    return false;
+    if (id) {
+      tags.ACOUSTID_ID = id;
+    }
+
+    return Object.keys(tags).length > 0 ? tags : null;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Error reading tags from ${filePath}: ${errorMessage}`);
+    return null;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
   }
 }
 
 /**
- * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file.
- * 
- * Uses AtomicParsley for MP4/M4A files to write proper iTunes-style freeform atoms.
- * Uses ffmpeg for other formats (FLAC, MP3, Ogg) with format-appropriate metadata fields.
+ * Checks if the audio file already has AcoustID related tags.
+ * Returns true if tags are found, false otherwise.
+ */
+export async function hasAcoustIDTags(filePath: string): Promise<boolean> {
+  const tags = await getAcoustIDTags(filePath);
+  return tags !== null && (!!tags.ACOUSTID_FINGERPRINT || !!tags.ACOUSTID_ID);
+}
+
+/**
+ * Gets the duration of an audio file in seconds using Taglib-Wasm.
+ */
+export async function getAudioDuration(filePath: string): Promise<number> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
+  try {
+    // Read file data and open with taglib-wasm
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
+
+    const properties = audioFile.audioProperties();
+    return properties.length || 0;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error getting audio duration from ${filePath}: ${errorMessage}`,
+    );
+    return 0;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
+  }
+}
+
+/**
+ * Writes ACOUSTID_FINGERPRINT and ACOUSTID_ID tags to the file using Taglib-Wasm.
  *
  * @param filePath Path to the audio file to tag.
  * @param fingerprint The fingerprint to embed.
@@ -117,79 +99,285 @@ export async function writeAcoustIDTags(
   fingerprint: string,
   acoustID: string,
 ): Promise<boolean> {
-  const fileMeta = parsePath(filePath);
-  const tempDir = await Deno.makeTempDir({ prefix: "amusic_tagging_" });
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
   try {
-    const tempFilePath = `${tempDir}/${fileMeta.name}_tagged${fileMeta.ext}`;
+    // Read file data and open with taglib-wasm
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
 
-    // Use correct metadata format for each container type
-    const ext = fileMeta.ext.toLowerCase();
-    let ffmpegArgs: string[];
-    
-    if (ext === ".mp4" || ext === ".m4a" || ext === ".mov") {
-      // Use AtomicParsley for proper MP4 metadata handling
-      console.log("  INFO: Using AtomicParsley for MP4 metadata writing...");
-      return await writeAcoustIDTagsMP4(filePath, fingerprint, acoustID);
-    } else if (ext === ".mp3") {
-      // For MP3 files, use ID3 field names (ffmpeg converts to TXXX frames)
-      ffmpegArgs = [
-        "-loglevel", "error",
-        "-i", filePath,
-        "-map", "0",
-        "-c", "copy",
-        "-map_metadata", "0",
-        "-metadata", `${ACOUSTID_FIELDS.ID3.FINGERPRINT}=${fingerprint}`,
-        "-metadata", `${ACOUSTID_FIELDS.ID3.ID}=${acoustID}`,
-      ];
-    } else {
-      // For FLAC, Ogg, and other formats, use Vorbis-style field names
-      ffmpegArgs = [
-        "-loglevel", "error",
-        "-i", filePath,
-        "-map", "0",
-        "-c", "copy",
-        "-map_metadata", "0",
-        "-metadata", `${ACOUSTID_FIELDS.VORBIS.FINGERPRINT}=${fingerprint}`,
-        "-metadata", `${ACOUSTID_FIELDS.VORBIS.ID}=${acoustID}`,
-      ];
-    }
-    
-    ffmpegArgs.push(tempFilePath);
-    
-    const ffmpegCmd = new Deno.Command("ffmpeg", {
-      args: ffmpegArgs,
-      stderr: "piped",
-    });
-    {
-      const { code, stderr } = await ffmpegCmd.output();
-      if (code !== 0) {
-        console.error(`  ffmpeg error: ${new TextDecoder().decode(stderr)}`);
-        return false;
-      }
+    // Use the built-in AcoustID methods
+    audioFile.setAcoustIdFingerprint(fingerprint);
+    if (acoustID) {
+      audioFile.setAcoustIdId(acoustID);
     }
 
-    // Replace original file (rename or copy across devices)
-    try {
-      await Deno.rename(tempFilePath, filePath);
-      return true;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("Cross-device link")) {
-        try {
-          await Deno.copyFile(tempFilePath, filePath);
-          return true;
-        } catch (copyErr) {
-          const copyMsg = copyErr instanceof Error ? copyErr.message : String(copyErr);
-          console.error(`Error copying tagged file across devices: ${copyMsg}`);
-          return false;
-        }
-      }
-      console.error(`Error replacing original file with tagged version: ${msg}`);
+    // Save the file with the new tags
+    const saveResult = audioFile.save();
+    if (!saveResult) {
+      console.error(`Failed to save tags to memory for ${filePath}`);
       return false;
     }
-  } finally {
-    await Deno.remove(tempDir, { recursive: true }).catch((e) =>
-      console.warn(`  Could not remove temp dir ${tempDir}: ${e.message}`)
+
+    // Get the modified file buffer and write to disk
+    const modifiedBuffer = audioFile.getFileBuffer();
+    await Deno.writeFile(filePath, new Uint8Array(modifiedBuffer));
+
+    return true;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error writing AcoustID tags to ${filePath}: ${errorMessage}`,
     );
+    return false;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
+  }
+}
+
+/**
+ * Gets ReplayGain tags from an audio file.
+ * Returns an object with all ReplayGain values or null if none exist.
+ */
+export async function getReplayGainTags(
+  filePath: string,
+): Promise<
+  {
+    trackGain?: number;
+    trackPeak?: number;
+    albumGain?: number;
+    albumPeak?: number;
+  } | null
+> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
+  try {
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
+
+    const tags: {
+      trackGain?: number;
+      trackPeak?: number;
+      albumGain?: number;
+      albumPeak?: number;
+    } = {};
+
+    const trackGain = audioFile.getReplayGainTrackGain();
+    const trackPeak = audioFile.getReplayGainTrackPeak();
+    const albumGain = audioFile.getReplayGainAlbumGain();
+    const albumPeak = audioFile.getReplayGainAlbumPeak();
+
+    if (trackGain !== undefined) tags.trackGain = trackGain;
+    if (trackPeak !== undefined) tags.trackPeak = trackPeak;
+    if (albumGain !== undefined) tags.albumGain = albumGain;
+    if (albumPeak !== undefined) tags.albumPeak = albumPeak;
+
+    return Object.keys(tags).length > 0 ? tags : null;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error reading ReplayGain tags from ${filePath}: ${errorMessage}`,
+    );
+    return null;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
+  }
+}
+
+/**
+ * Writes ReplayGain tags to an audio file.
+ * @param filePath Path to the audio file
+ * @param tags Object containing ReplayGain values to write
+ * @returns True if successful, false otherwise
+ */
+export async function writeReplayGainTags(
+  filePath: string,
+  tags: {
+    trackGain?: number;
+    trackPeak?: number;
+    albumGain?: number;
+    albumPeak?: number;
+  },
+): Promise<boolean> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
+  try {
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
+
+    // Set ReplayGain values
+    if (tags.trackGain !== undefined) {
+      audioFile.setReplayGainTrackGain(tags.trackGain);
+    }
+    if (tags.trackPeak !== undefined) {
+      audioFile.setReplayGainTrackPeak(tags.trackPeak);
+    }
+    if (tags.albumGain !== undefined) {
+      audioFile.setReplayGainAlbumGain(tags.albumGain);
+    }
+    if (tags.albumPeak !== undefined) {
+      audioFile.setReplayGainAlbumPeak(tags.albumPeak);
+    }
+
+    // Save the file
+    const saveResult = audioFile.save();
+    if (!saveResult) {
+      console.error(`Failed to save ReplayGain tags to memory for ${filePath}`);
+      return false;
+    }
+
+    // Write to disk
+    const modifiedBuffer = audioFile.getFileBuffer();
+    await Deno.writeFile(filePath, new Uint8Array(modifiedBuffer));
+
+    return true;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error writing ReplayGain tags to ${filePath}: ${errorMessage}`,
+    );
+    return false;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
+  }
+}
+
+/**
+ * Gets comprehensive metadata from an audio file.
+ * Returns an object with all available metadata.
+ */
+export async function getComprehensiveMetadata(
+  filePath: string,
+): Promise<
+  {
+    // Basic tags
+    title?: string;
+    artist?: string;
+    album?: string;
+    comment?: string;
+    genre?: string;
+    year?: number;
+    track?: number;
+
+    // Audio properties
+    duration?: number;
+    bitrate?: number;
+    sampleRate?: number;
+    channels?: number;
+    format?: string;
+
+    // Extended tags
+    acoustIdFingerprint?: string;
+    acoustIdId?: string;
+    musicBrainzTrackId?: string;
+    musicBrainzReleaseId?: string;
+    musicBrainzArtistId?: string;
+
+    // ReplayGain
+    replayGainTrackGain?: number;
+    replayGainTrackPeak?: number;
+    replayGainAlbumGain?: number;
+    replayGainAlbumPeak?: number;
+
+    // Cover art
+    hasCoverArt?: boolean;
+    coverArtCount?: number;
+  } | null
+> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
+  try {
+    const fileData = await Deno.readFile(filePath);
+    audioFile = await taglib.open(fileData, filePath);
+
+    const metadata: Record<string, unknown> = {};
+
+    // Basic tags
+    const tag = audioFile.tag();
+    if (tag.title) metadata.title = tag.title;
+    if (tag.artist) metadata.artist = tag.artist;
+    if (tag.album) metadata.album = tag.album;
+    if (tag.comment) metadata.comment = tag.comment;
+    if (tag.genre) metadata.genre = tag.genre;
+    if (tag.year) metadata.year = tag.year;
+    if (tag.track) metadata.track = tag.track;
+
+    // Audio properties
+    const props = audioFile.audioProperties();
+    if (props.length !== undefined) metadata.duration = props.length;
+    if (props.bitrate !== undefined) metadata.bitrate = props.bitrate;
+    if (props.sampleRate !== undefined) metadata.sampleRate = props.sampleRate;
+    if (props.channels !== undefined) metadata.channels = props.channels;
+
+    // Format
+    const format = audioFile.getFormat();
+    if (format) metadata.format = format;
+
+    // Extended tags
+    const acoustIdFingerprint = audioFile.getAcoustIdFingerprint();
+    if (acoustIdFingerprint) metadata.acoustIdFingerprint = acoustIdFingerprint;
+
+    const acoustIdId = audioFile.getAcoustIdId();
+    if (acoustIdId) metadata.acoustIdId = acoustIdId;
+
+    const mbTrackId = audioFile.getMusicBrainzTrackId();
+    if (mbTrackId) metadata.musicBrainzTrackId = mbTrackId;
+
+    const mbReleaseId = audioFile.getMusicBrainzReleaseId();
+    if (mbReleaseId) metadata.musicBrainzReleaseId = mbReleaseId;
+
+    const mbArtistId = audioFile.getMusicBrainzArtistId();
+    if (mbArtistId) metadata.musicBrainzArtistId = mbArtistId;
+
+    // ReplayGain
+    const trackGain = audioFile.getReplayGainTrackGain();
+    if (trackGain !== undefined) metadata.replayGainTrackGain = trackGain;
+
+    const trackPeak = audioFile.getReplayGainTrackPeak();
+    if (trackPeak !== undefined) metadata.replayGainTrackPeak = trackPeak;
+
+    const albumGain = audioFile.getReplayGainAlbumGain();
+    if (albumGain !== undefined) metadata.replayGainAlbumGain = albumGain;
+
+    const albumPeak = audioFile.getReplayGainAlbumPeak();
+    if (albumPeak !== undefined) metadata.replayGainAlbumPeak = albumPeak;
+
+    // Cover art
+    try {
+      const pictures = audioFile.getPictures();
+      if (pictures && pictures.length > 0) {
+        metadata.hasCoverArt = true;
+        metadata.coverArtCount = pictures.length;
+      } else {
+        metadata.hasCoverArt = false;
+        metadata.coverArtCount = 0;
+      }
+    } catch {
+      // Some formats may not support pictures
+      metadata.hasCoverArt = false;
+      metadata.coverArtCount = 0;
+    }
+
+    return Object.keys(metadata).length > 0 ? metadata : null;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error reading comprehensive metadata from ${filePath}: ${errorMessage}`,
+    );
+    return null;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
   }
 }

@@ -7,7 +7,7 @@ import {
 import { returnsNext, stub } from "jsr:@std/testing/mock";
 import {
   generateFingerprint,
-  hasAcousticIDTags,
+  hasAcoustIDTags,
   // writeAcousticIDFingerprint, // Replaced by writeAcoustIDTags
   lookupFingerprint,
   writeAcoustIDTags,
@@ -121,14 +121,14 @@ Deno.test("Acoustid Tests", async (t) => {
   await t.step("Setup Mocks", () => MockDenoCommand.setup());
 
   // Individual test suites
-  await t.step("hasAcousticIDTags", async (tInner) => {
-    // These tests remain largely the same, as hasAcousticIDTags functionality hasn't changed.
+  await t.step("hasAcoustIDTags", async (tInner) => {
+    // These tests remain largely the same, as hasAcoustIDTags functionality hasn't changed.
     await tInner.step("should return true if ffprobe finds tags", async () => {
       MockDenoCommand.addMock("ffprobe", {
         code: 0,
         stdout: "ACOUSTID_FINGERPRINT=somefingerprint\nACOUSTID_ID=someid",
       });
-      const result = await hasAcousticIDTags("test.mp3");
+      const result = await hasAcoustIDTags("test.mp3");
       assertEquals(result, true);
     });
 
@@ -136,14 +136,14 @@ Deno.test("Acoustid Tests", async (t) => {
       "should return false if ffprobe finds no tags (empty stdout, code 0)",
       async () => {
         MockDenoCommand.addMock("ffprobe", { code: 0, stdout: "" });
-        const result = await hasAcousticIDTags("test.mp3");
+        const result = await hasAcoustIDTags("test.mp3");
         assertEquals(result, false);
       },
     );
 
-    // Add more hasAcousticIDTags tests if necessary, or keep as is if comprehensive enough.
+    // Add more hasAcoustIDTags tests if necessary, or keep as is if comprehensive enough.
     // For brevity, assuming existing tests are sufficient.
-    // ... (other hasAcousticIDTags tests from original)
+    // ... (other hasAcoustIDTags tests from original)
     await tInner.step(
       "should return false if ffprobe finds no tags (empty stdout, code 1, known message)",
       async () => {
@@ -152,7 +152,7 @@ Deno.test("Acoustid Tests", async (t) => {
           stdout: "",
           stderr: "test.mp3: Invalid argument",
         });
-        const result = await hasAcousticIDTags("test.mp3");
+        const result = await hasAcoustIDTags("test.mp3");
         assertEquals(result, false);
       },
     );
@@ -165,7 +165,7 @@ Deno.test("Acoustid Tests", async (t) => {
           stdout: "",
           stderr: "filePath does not contain any stream",
         });
-        const result = await hasAcousticIDTags("test.mp3");
+        const result = await hasAcoustIDTags("test.mp3");
         assertEquals(result, false);
       },
     );
@@ -179,7 +179,7 @@ Deno.test("Acoustid Tests", async (t) => {
         });
         // const consoleWarnStub = stub(console, "warn"); // Original code has this commented out
         try {
-          const result = await hasAcousticIDTags("test.mp3");
+          const result = await hasAcoustIDTags("test.mp3");
           assertEquals(result, false);
         } finally {
           // consoleWarnStub.restore();

@@ -1,12 +1,12 @@
 // amusic.ts
 import { Command } from "@cliffy/command";
-import { getAcousticIDTags, processAcoustIDTagging } from "./lib/acoustid.ts";
+import { processAcoustIDTagging } from "./lib/acoustid.ts";
+import { getComprehensiveMetadata } from "./lib/tagging.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
 import { dirname, extname, fromFileUrl, join } from "jsr:@std/path";
 // Auto-load environment variables from a .env file located alongside this script (allows ACOUSTID_API_KEY in .env)
 import { loadSync } from "jsr:@std/dotenv";
-import { parse } from "jsr:@std/flags";
 const __dirname = dirname(fromFileUrl(import.meta.url));
 // Load environment variables from a .env file located alongside this script (e.g. ACOUSTID_API_KEY)
 try {
@@ -64,171 +64,266 @@ if (import.meta.main) {
     apiKey?: string;
   }
 
-  // Basic mode: fallback when not using 'easy' subcommand
-  if (Deno.args[0] !== "easy") {
-    const parsed = parse(Deno.args, {
-      boolean: ["force", "quiet", "show-tags", "dry-run"],
-      string: ["api-key"],
-      alias: { f: "force", q: "quiet" },
-      default: { quiet: false, force: false, "dry-run": false },
-    });
-    const options: CommandOptions = {
-      force: parsed.force,
-      quiet: parsed.quiet,
-      showTags: parsed["show-tags"],
-      dryRun: parsed["dry-run"],
-      apiKey: parsed["api-key"] ?? Deno.env.get("ACOUSTID_API_KEY") ?? "",
-    };
-    const files = parsed._.map(String);
-    let filesToProcess: string[] = [];
-    for (const fileOrDir of files) {
-      const ext = extname(fileOrDir).toLowerCase().slice(1);
-      if (SUPPORTED_EXTENSIONS.includes(ext)) {
-        filesToProcess.push(fileOrDir);
-      } else {
-        try {
-          for await (const entry of Deno.readDir(fileOrDir)) {
-            if (entry.isFile) {
-              const entryExt = extname(entry.name).toLowerCase().slice(1);
-              if (SUPPORTED_EXTENSIONS.includes(entryExt)) {
-                filesToProcess.push(join(fileOrDir, entry.name));
-              }
-            }
-          }
-        } catch {
-          console.error(
-            `Warning: Path "${fileOrDir}" not found or inaccessible; skipping.`,
-          );
-        }
-      }
-    }
-    if (options.showTags) {
-      if (!options.quiet) console.log("Displaying existing AcoustID tags:");
-      for (const file of filesToProcess) {
-        try {
-          await ensureCommandExists("ffprobe");
-          const tags = await getAcousticIDTags(file);
-          if (tags) {
-            console.log(`\nFile: ${file}`);
-            console.log(
-              `  ACOUSTID_ID: ${tags.ACOUSTID_ID || "Not found"}`,
-            );
-            console.log(
-              `  ACOUSTID_FINGERPRINT: ${
-                tags.ACOUSTID_FINGERPRINT || "Not found"
-              }`,
-            );
-          } else {
-            console.log(`\nFile: ${file}`);
-            console.log("  No AcoustID tags found.");
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error
-            ? error.message
-            : String(error);
-          console.error(`Error reading tags for ${file}: ${errorMessage}`);
-        }
-      }
-      Deno.exit(0);
-    }
-
-    // If a single directory was provided, first calculate and embed ReplayGain for that album
-    if (files.length === 1) {
-      const dirPath = files[0];
-      try {
-        const stat = await Deno.stat(dirPath);
-        if (stat.isDirectory) {
-          if (!options.quiet) {
-            console.log(
-              `\nACTION: Calculating ReplayGain for album: ${dirPath}`,
-            );
-          }
-          const ok = await calculateReplayGain(dirPath, options.quiet);
-          if (!ok) {
-            console.error(
-              `  ERROR: ReplayGain calculation failed for album "${dirPath}".`,
-            );
-          }
-        }
-      } catch {
-        // not a single directory input; skip ReplayGain
-      }
-    }
-    if (!options.apiKey) {
-      if (!options.quiet) {
-        console.warn(
-          "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
-        );
-      }
-    }
-    if (!options.quiet) {
-      console.log(`Processing ${filesToProcess.length} file(s)...`);
-      if (options.apiKey) {
-        console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
-      }
-    }
-    let processedCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-    let lookupFailedCount = 0;
-    let noResultsCount = 0;
-    for (const file of filesToProcess) {
-      try {
-        if (!options.quiet && filesToProcess.length > 1) console.log("");
-        const status = await processAcoustIDTagging(
-          file,
-          options.apiKey ?? "",
-          options.force || false,
-          options.quiet || false,
-          options.dryRun || false,
-        );
-        switch (status) {
-          case "processed":
-            processedCount++;
-            break;
-          case "skipped":
-            skippedCount++;
-            break;
-          case "failed":
-            failedCount++;
-            break;
-          case "lookup_failed":
-            lookupFailedCount++;
-            break;
-          case "no_results":
-            noResultsCount++;
-            break;
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error
-          ? error.message
-          : String(error);
-        console.error(`Unexpected error processing ${file}: ${errorMessage}`);
-        failedCount++;
-      }
-    }
-    console.log("\n--- Processing Complete ---");
-    console.log(`Successfully processed: ${processedCount}`);
-    console.log(`Skipped (already tagged/force not used): ${skippedCount}`);
-    console.log(`No AcoustID results found: ${noResultsCount}`);
-    console.log(
-      `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
-    );
-    console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
-    console.log("---------------------------");
-    if (options.dryRun) {
-      console.log("\nNOTE: This was a dry run. No files were modified.");
-    }
-    Deno.exit(0);
-  }
-
   const program = new Command()
     .name("amusic")
     .version("0.1.0")
     .description(
       "Calculate ReplayGain and embed AcousticID fingerprints and IDs.",
-    );
+    )
+    // Default command options
+    .option("-f, --force", "Force reprocessing even if tags exist.")
+    .option(
+      "-q, --quiet",
+      "Suppress informational output. Errors are still shown.",
+      { default: false },
+    )
+    .option(
+      "--show-tags",
+      "Display existing AcoustID tags and exit. No modifications made.",
+    )
+    .option(
+      "--dry-run",
+      "Simulate processing and API lookups but do not write any tags to files.",
+    )
+    .option(
+      "--api-key <key:string>",
+      "AcoustID API key (required for lookups).",
+      { default: Deno.env.get("ACOUSTID_API_KEY") },
+    )
+    .arguments("<...files:string>")
+    .action(async (options: CommandOptions, ...files: string[]) => {
+      const filesToProcess: string[] = [];
+      for (const fileOrDir of files) {
+        try {
+          const info = await Deno.stat(fileOrDir);
+          if (info.isDirectory) {
+            for await (const entry of Deno.readDir(fileOrDir)) {
+              if (entry.isFile) {
+                const ext = extname(entry.name).toLowerCase().slice(1);
+                if (SUPPORTED_EXTENSIONS.includes(ext)) {
+                  filesToProcess.push(join(fileOrDir, entry.name));
+                }
+              }
+            }
+          } else if (info.isFile) {
+            const ext = extname(fileOrDir).toLowerCase().slice(1);
+            if (SUPPORTED_EXTENSIONS.includes(ext)) {
+              filesToProcess.push(fileOrDir);
+            } else {
+              console.error(
+                `Warning: File "${fileOrDir}" has unsupported extension; skipping.`,
+              );
+            }
+          }
+        } catch (e) {
+          if (e instanceof Deno.errors.NotFound) {
+            console.error(`Error: Path "${fileOrDir}" not found; skipping.`);
+          } else {
+            console.error(
+              `Warning: Path "${fileOrDir}" not found or inaccessible; skipping.`,
+            );
+          }
+        }
+      }
 
+      // Handle --show-tags
+      if (options.showTags) {
+        if (!options.quiet) {
+          console.log("Displaying comprehensive metadata:");
+        }
+        for (const file of filesToProcess) {
+          try {
+            const metadata = await getComprehensiveMetadata(file);
+            console.log(`\nFile: ${file}`);
+
+            if (metadata) {
+              // Basic tags
+              console.log("\n  Basic Tags:");
+              console.log(`    Title: ${metadata.title || "(none)"}`);
+              console.log(`    Artist: ${metadata.artist || "(none)"}`);
+              console.log(`    Album: ${metadata.album || "(none)"}`);
+              console.log(`    Year: ${metadata.year || "(none)"}`);
+              console.log(`    Track: ${metadata.track || "(none)"}`);
+              console.log(`    Genre: ${metadata.genre || "(none)"}`);
+              if (metadata.comment) {
+                console.log(`    Comment: ${metadata.comment}`);
+              }
+
+              // Audio properties
+              console.log("\n  Audio Properties:");
+              console.log(`    Format: ${metadata.format || "Unknown"}`);
+              console.log(
+                `    Duration: ${
+                  metadata.duration ? `${metadata.duration}s` : "(none)"
+                }`,
+              );
+              console.log(
+                `    Bitrate: ${
+                  metadata.bitrate ? `${metadata.bitrate} kbps` : "(none)"
+                }`,
+              );
+              console.log(
+                `    Sample Rate: ${
+                  metadata.sampleRate ? `${metadata.sampleRate} Hz` : "(none)"
+                }`,
+              );
+              console.log(`    Channels: ${metadata.channels || "(none)"}`);
+
+              // Extended tags
+              if (
+                metadata.acoustIdFingerprint || metadata.acoustIdId ||
+                metadata.musicBrainzTrackId || metadata.musicBrainzReleaseId ||
+                metadata.musicBrainzArtistId
+              ) {
+                console.log("\n  Extended Tags:");
+                if (metadata.acoustIdId) {
+                  console.log(`    AcoustID ID: ${metadata.acoustIdId}`);
+                }
+                if (metadata.acoustIdFingerprint) {
+                  console.log(
+                    `    AcoustID Fingerprint: ${
+                      metadata.acoustIdFingerprint.substring(0, 50)
+                    }...`,
+                  );
+                }
+                if (metadata.musicBrainzTrackId) {
+                  console.log(
+                    `    MusicBrainz Track ID: ${metadata.musicBrainzTrackId}`,
+                  );
+                }
+                if (metadata.musicBrainzReleaseId) {
+                  console.log(
+                    `    MusicBrainz Release ID: ${metadata.musicBrainzReleaseId}`,
+                  );
+                }
+                if (metadata.musicBrainzArtistId) {
+                  console.log(
+                    `    MusicBrainz Artist ID: ${metadata.musicBrainzArtistId}`,
+                  );
+                }
+              }
+
+              // ReplayGain
+              if (
+                metadata.replayGainTrackGain !== undefined ||
+                metadata.replayGainAlbumGain !== undefined
+              ) {
+                console.log("\n  ReplayGain:");
+                if (metadata.replayGainTrackGain !== undefined) {
+                  console.log(
+                    `    Track Gain: ${metadata.replayGainTrackGain} dB`,
+                  );
+                }
+                if (metadata.replayGainTrackPeak !== undefined) {
+                  console.log(
+                    `    Track Peak: ${metadata.replayGainTrackPeak}`,
+                  );
+                }
+                if (metadata.replayGainAlbumGain !== undefined) {
+                  console.log(
+                    `    Album Gain: ${metadata.replayGainAlbumGain} dB`,
+                  );
+                }
+                if (metadata.replayGainAlbumPeak !== undefined) {
+                  console.log(
+                    `    Album Peak: ${metadata.replayGainAlbumPeak}`,
+                  );
+                }
+              }
+
+              // Cover art
+              console.log("\n  Cover Art:");
+              console.log(
+                `    Has Cover: ${metadata.hasCoverArt ? "Yes" : "No"}`,
+              );
+              if (metadata.hasCoverArt && metadata.coverArtCount) {
+                console.log(`    Cover Count: ${metadata.coverArtCount}`);
+              }
+            } else {
+              console.log("  No metadata found or error reading file.");
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error(`\nFile: ${file}`);
+            console.error(`  Error reading metadata: ${msg}`);
+          }
+        }
+        return; // Exit after showing tags
+      }
+
+      if (filesToProcess.length === 0) {
+        console.error("Error: No supported audio files found.");
+        Deno.exit(1);
+      }
+
+      if (!options.quiet) {
+        if (!options.apiKey) {
+          console.log(
+            "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
+          );
+        }
+      }
+      if (!options.quiet) {
+        console.log(`Processing ${filesToProcess.length} file(s)...`);
+        if (options.apiKey) {
+          console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
+        }
+      }
+      let processedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      let lookupFailedCount = 0;
+      let noResultsCount = 0;
+      for (const file of filesToProcess) {
+        try {
+          if (!options.quiet && filesToProcess.length > 1) console.log("");
+          const status = await processAcoustIDTagging(
+            file,
+            options.apiKey || "",
+            options.force || false,
+            options.quiet,
+            options.dryRun || false,
+          );
+          switch (status) {
+            case "processed":
+              processedCount++;
+              break;
+            case "skipped":
+              skippedCount++;
+              break;
+            case "failed":
+              failedCount++;
+              break;
+            case "lookup_failed":
+              lookupFailedCount++;
+              break;
+            case "no_results":
+              noResultsCount++;
+              break;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error
+            ? error.message
+            : String(error);
+          console.error(`Unexpected error processing ${file}: ${errorMessage}`);
+          failedCount++;
+        }
+      }
+      console.log("\n--- Processing Complete ---");
+      console.log(`Successfully processed: ${processedCount}`);
+      console.log(`Skipped (already tagged/force not used): ${skippedCount}`);
+      console.log(`No AcoustID results found: ${noResultsCount}`);
+      console.log(
+        `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
+      );
+      console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
+      console.log("---------------------------");
+      if (options.dryRun) {
+        console.log("\nNOTE: This was a dry run. No files were modified.");
+      }
+    });
+
+  // Add easy subcommand
   program
     .command(
       "easy <library:string>",
@@ -261,8 +356,6 @@ if (import.meta.main) {
         Deno.exit(1);
       }
       await ensureCommandExists(fpcalcPath);
-      await ensureCommandExists("ffprobe");
-      await ensureCommandExists("ffmpeg");
       await ensureCommandExists(rsgainPath);
 
       try {
@@ -337,160 +430,6 @@ if (import.meta.main) {
       console.log(`No AcoustID results found: ${noResultsCount}`);
       console.log(`AcoustID lookup failed: ${lookupFailedCount}`);
       console.log(`Other failures: ${failedCount}`);
-      if (options.dryRun) {
-        console.log("\nNOTE: This was a dry run. No files were modified.");
-      }
-    });
-
-  program
-    .option("-f, --force", "Force reprocessing even if tags exist.", {
-      override: true,
-    })
-    .option(
-      "-q, --quiet",
-      "Suppress informational output. Errors are still shown.",
-      { default: false, override: true },
-    )
-    .option(
-      "--show-tags",
-      "Display existing AcoustID tags for files and exit.",
-    )
-    .option(
-      "--dry-run",
-      "Simulate processing and API lookups but do not write any tags to files.",
-      { override: true },
-    )
-    .option(
-      "--api-key <key:string>",
-      "AcoustID API key (required for lookups).",
-      { default: Deno.env.get("ACOUSTID_API_KEY"), override: true },
-    )
-    .arguments("<...files:string>")
-    .action(async (options: CommandOptions, ...files: string[]) => {
-      let filesToProcess: string[] = [];
-      for (const fileOrDir of files) {
-        try {
-          const info = await Deno.stat(fileOrDir);
-          if (info.isDirectory) {
-            for await (const entry of Deno.readDir(fileOrDir)) {
-              if (entry.isFile) {
-                const ext = extname(entry.name).toLowerCase().slice(1);
-                if (SUPPORTED_EXTENSIONS.includes(ext)) {
-                  filesToProcess.push(join(fileOrDir, entry.name));
-                }
-              }
-            }
-          } else {
-            const ext = extname(fileOrDir).toLowerCase().slice(1);
-            if (SUPPORTED_EXTENSIONS.includes(ext)) {
-              filesToProcess.push(fileOrDir);
-            }
-          }
-        } catch {
-          console.error(
-            `Warning: Path "${fileOrDir}" not found or inaccessible; skipping.`,
-          );
-        }
-      }
-      // Handle --show-tags
-      if (options.showTags) {
-        if (!options.quiet) {
-          console.log("Displaying existing AcoustID tags:");
-        }
-        for (const file of filesToProcess) {
-          try {
-            await ensureCommandExists("ffprobe");
-            const tags = await getAcousticIDTags(file);
-            if (tags) {
-              console.log(`\nFile: ${file}`);
-              console.log(
-                `  ACOUSTID_ID: ${tags.ACOUSTID_ID || "Not found"}`,
-              );
-              console.log(
-                `  ACOUSTID_FINGERPRINT: ${
-                  tags.ACOUSTID_FINGERPRINT || "Not found"
-                }`,
-              );
-            } else {
-              console.log(`\nFile: ${file}`);
-              console.log("  No AcoustID tags found.");
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error
-              ? error.message
-              : String(error);
-            console.error(`Error reading tags for ${file}: ${errorMessage}`);
-          }
-        }
-        Deno.exit(0); // Exit after showing tags
-      }
-
-      if (!options.apiKey) {
-        if (!options.quiet) {
-          console.warn(
-            "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
-          );
-        }
-      }
-
-      if (!options.quiet) {
-        console.log(`Processing ${filesToProcess.length} file(s)...`);
-        if (options.apiKey) {
-          console.log(`Using API Key: ${options.apiKey.substring(0, 5)}...`);
-        }
-      }
-
-      let processedCount = 0;
-      let skippedCount = 0;
-      let failedCount = 0;
-      let lookupFailedCount = 0;
-      let noResultsCount = 0;
-
-      for (const file of filesToProcess) {
-        try {
-          if (!options.quiet && filesToProcess.length > 1) console.log("");
-          const status = await processAcoustIDTagging(
-            file,
-            options.apiKey ?? "",
-            options.force || false,
-            options.quiet || false,
-            options.dryRun || false,
-          );
-          switch (status) {
-            case "processed":
-              processedCount++;
-              break;
-            case "skipped":
-              skippedCount++;
-              break;
-            case "failed":
-              failedCount++;
-              break;
-            case "lookup_failed":
-              lookupFailedCount++;
-              break;
-            case "no_results":
-              noResultsCount++;
-              break;
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error
-            ? error.message
-            : String(error);
-          console.error(`Unexpected error processing ${file}: ${errorMessage}`);
-          failedCount++;
-        }
-      }
-
-      console.log("\n--- Processing Complete ---");
-      console.log(`Successfully processed: ${processedCount}`);
-      console.log(`Skipped (already tagged/force not used): ${skippedCount}`);
-      console.log(`No AcoustID results found: ${noResultsCount}`);
-      console.log(
-        `AcoustID lookup failed (API/network issues): ${lookupFailedCount}`,
-      );
-      console.log(`Other failures (e.g., file access, fpcalc): ${failedCount}`);
-      console.log("---------------------------");
       if (options.dryRun) {
         console.log("\nNOTE: This was a dry run. No files were modified.");
       }

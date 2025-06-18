@@ -1,7 +1,12 @@
 // lib/acoustid.ts
 import { getVendorBinaryPath } from "./vendor_tools.ts";
-import { writeAcoustIDTags } from "./tagging.ts";
-export { writeAcoustIDTags };
+import {
+  getAcoustIDTags,
+  getAudioDuration,
+  hasAcoustIDTags,
+  writeAcoustIDTags,
+} from "./tagging.ts";
+export { getAcoustIDTags, hasAcoustIDTags, writeAcoustIDTags };
 
 export interface AcoustIDApiError {
   message: string;
@@ -42,96 +47,6 @@ export interface LookupResult {
   status?: "ok" | "error";
   results?: ResultItem[];
   error?: AcoustIDApiError; // Present if status is "error"
-}
-
-/**
- * Silently checks if the audio file already has AcousticID related tags.
- * Returns true if tags are found, false otherwise.
- */
-export async function hasAcousticIDTags(filePath: string): Promise<boolean> {
-  const command = new Deno.Command("ffprobe", {
-    args: [
-      "-v",
-      "quiet",
-      "-show_entries",
-      "format_tags=ACOUSTID_FINGERPRINT,ACOUSTID_ID",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      filePath,
-    ],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const { code, stdout, stderr } = await command.output();
-
-  if (code !== 0) {
-    const errorOutput = new TextDecoder().decode(stderr).trim();
-    // ffprobe can exit with 1 if tags are missing or file has no streams, this is not an "error" for this check.
-    if (
-      errorOutput && !errorOutput.includes("does not contain any stream") &&
-      !errorOutput.includes("Invalid argument")
-    ) {
-      // Log a warning if it's an unexpected ffprobe issue.
-      // console.warn(`  ffprobe check warning for ${filePath}: ${errorOutput.split("\n")[0]}`);
-    }
-    return false;
-  }
-  const outputText = new TextDecoder().decode(stdout).trim();
-  return outputText.length > 0;
-}
-
-/**
- * Retrieves existing ACOUSTID_FINGERPRINT and ACOUSTID_ID tags from a file.
- * Returns an object with the tags or null if not found or an error occurs.
- */
-export async function getAcousticIDTags(
-  filePath: string,
-): Promise<{ ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } | null> {
-  const command = new Deno.Command("ffprobe", {
-    args: [
-      "-v",
-      "quiet",
-      "-show_entries",
-      "format_tags=ACOUSTID_FINGERPRINT,ACOUSTID_ID",
-      "-of",
-      "default=noprint_wrappers=1", // Output format: key=value
-      filePath,
-    ],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const { code, stdout, stderr } = await command.output();
-
-  if (code !== 0) {
-    const errorOutput = new TextDecoder().decode(stderr).trim();
-    if (
-      errorOutput && !errorOutput.includes("does not contain any stream") &&
-      !errorOutput.includes("Invalid argument") // Common if tags section is empty
-    ) {
-      // console.warn(`  ffprobe check warning for ${filePath}: ${errorOutput.split("\n")[0]}`);
-    }
-    return null; // Error or no tags found
-  }
-
-  const outputText = new TextDecoder().decode(stdout).trim();
-  if (!outputText) {
-    return null; // No tags found
-  }
-
-  const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
-  outputText.split("\n").forEach((line) => {
-    const [key, value] = line.split("=");
-    if (key === "TAG:ACOUSTID_FINGERPRINT") {
-      tags.ACOUSTID_FINGERPRINT = value;
-    } else if (key === "TAG:ACOUSTID_ID") {
-      tags.ACOUSTID_ID = value;
-    }
-  });
-
-  if (Object.keys(tags).length === 0) {
-    return null; // No relevant tags found
-  }
-  return tags;
 }
 
 /**
@@ -258,7 +173,7 @@ export async function processAcoustIDTagging(
   }
 
   if (!quiet) console.log("  Checking for existing AcoustID tags...");
-  const tagsExist = await hasAcousticIDTags(filePath);
+  const tagsExist = await hasAcoustIDTags(filePath);
 
   if (tagsExist && !force) {
     if (!quiet) {
@@ -292,41 +207,12 @@ export async function processAcoustIDTagging(
     );
   }
 
-  // Duration is needed for the lookup. For simplicity, we'll try to get it from ffprobe.
-  // This could be optimized by getting it once if not available from fpcalc directly.
-  let duration = 0;
-  try {
-    const ffprobeCmd = new Deno.Command("ffprobe", {
-      args: [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        filePath,
-      ],
-      stdout: "piped",
-    });
-    const { stdout: durationOutput } = await ffprobeCmd.output();
-    const durationStr = new TextDecoder().decode(durationOutput).trim();
-    if (durationStr && !isNaN(parseFloat(durationStr))) {
-      duration = parseFloat(durationStr);
-    } else {
-      if (!quiet) {
-        console.log(
-          "  WARNING: Could not determine audio duration. AcoustID lookup might be less accurate or fail.",
-        );
-      }
-    }
-  } catch (e) {
-    if (!quiet) {
-      // Check if the error is an instance of Error before accessing message
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      console.warn(
-        `WARNING: Could not determine audio duration due to ffprobe error: ${errorMessage}. AcoustID lookup might be less accurate or fail.`,
-      );
-    }
+  // Duration is needed for the lookup. Get it from Taglib-Wasm.
+  const duration = await getAudioDuration(filePath);
+  if (duration === 0 && !quiet) {
+    console.log(
+      "  WARNING: Could not determine audio duration. AcoustID lookup might be less accurate or fail.",
+    );
   }
 
   let acoustIDToWrite = "";

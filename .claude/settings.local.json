@@ -12,7 +12,22 @@
       "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley --help)",
       "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley --reverseDNS-help)",
       "Bash(deno run:*)",
-      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley:*)"
+      "Bash(src/vendor/macos-arm64/atomicparsley/AtomicParsley:*)",
+      "Bash(deno fmt:*)",
+      "Bash(deno lint:*)",
+      "Bash(deno test:*)",
+      "mcp__fetch__fetch",
+      "Bash(grep:*)",
+      "Bash(deno check:*)",
+      "WebFetch(domain:charleswiltgen.github.io)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(deno:*)",
+      "Bash(rm:*)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(rg:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }

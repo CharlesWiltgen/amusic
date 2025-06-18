@@ -1,6 +1,7 @@
 {
   "imports": {
     "@cliffy/command": "jsr:@cliffy/command@1.0.0-rc.7",
-    "@cliffy/command/": "jsr:@cliffy/command@1.0.0-rc.7/"
+    "@cliffy/command/": "jsr:@cliffy/command@1.0.0-rc.7/",
+    "taglib-wasm": "npm:taglib-wasm@0.3.20"
   }
 }
