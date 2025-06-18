@@ -1,9 +1,0 @@
-;FFMETADATA1
-minor_version=512
-major_brand=M4A 
-compatible_brands=M4A isomiso2
-artist=TestArtist
-title=TestTitle
-encoder=Lavf58.76.100
-----:com.apple.iTunes:ACOUSTID_FINGERPRINT=myFPz
-----:com.apple.iTunes:ACOUSTID_ID=myIDzz
