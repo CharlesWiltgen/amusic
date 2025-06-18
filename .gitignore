@@ -127,5 +127,7 @@ dist/
 # Temporary files from amusic.ts integration tests
 .test_run_files/
 
-# Claude Code guidance file
+# Claude Code guidance files
 CLAUDE.md
+CLAUDE.local.md
+BACKLOG.md
