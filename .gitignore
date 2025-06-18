@@ -142,3 +142,6 @@ mise.toml
 
 # VSCode workspace
 amusic.code-workspace
+
+# Linter configuration
+.markdownlint.json
