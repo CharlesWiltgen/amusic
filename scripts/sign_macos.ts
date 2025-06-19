@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck: Uses Deno.Command API that may not be available in all type definitions
 // scripts/sign_macos.ts
 // Automatically un-quarantine and ad-hoc code sign the 'dist/amusic' binary on macOS.
 if (Deno.build.os !== "darwin") {
@@ -9,10 +9,13 @@ if (Deno.build.os !== "darwin") {
 const binaryPath = "dist/amusic";
 
 async function runCommand(cmd: string[]) {
-  const p = Deno.run({ cmd, stdout: "inherit", stderr: "inherit" });
-  const status = await p.status();
-  p.close();
-  if (!status.success) {
+  const command = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const { success } = await command.output();
+  if (!success) {
     throw new Error(`Command failed: ${cmd.join(" ")}`);
   }
 }

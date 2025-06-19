@@ -4,7 +4,11 @@
   "exports": {},
   "tasks": {
     "start": "deno run --unstable-lazy-dynamic-imports --allow-read --allow-run --allow-write --allow-env src/amusic.ts",
-    "build": "deno compile --unstable-lazy-dynamic-imports --allow-read --allow-run --allow-write --allow-env --include src/vendor -o dist/amusic src/amusic.ts && deno run --allow-run scripts/sign_macos.ts"
+    "build": "deno compile --unstable-lazy-dynamic-imports --allow-read --allow-run --allow-write --allow-env --include src/vendor -o dist/amusic src/amusic.ts && deno run --allow-run scripts/sign_macos.ts",
+    "check": "deno fmt --check && deno lint",
+    "fix": "deno fmt && deno lint",
+    "test": "deno test --allow-read --allow-run --allow-write --allow-env",
+    "pre-commit": "deno task check"
   },
   "exclude": ["dist/", "amusic"],
   "fmt": {

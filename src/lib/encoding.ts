@@ -217,7 +217,7 @@ async function copyMetadata(
 
     // Get ALL metadata using properties() - this preserves everything
     const allMetadata = sourceFile.properties();
-    
+
     // Get cover art separately (not included in properties)
     const pictures = sourceFile.getPictures();
 
@@ -240,7 +240,7 @@ async function copyMetadata(
     // Add encoder information
     destFile.setProperty("ENCODER", `amusic v${VERSION} (taglib-wasm)`);
     destFile.setProperty("ENCODER_SETTINGS", "afconvert -d aac -s 3 -q 127");
-    
+
     // Copy cover art
     if (pictures && pictures.length > 0) {
       for (const picture of pictures) {

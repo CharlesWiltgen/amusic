@@ -3,7 +3,6 @@ import {
   assert,
   assertEquals,
   assertExists,
-  assertNotEquals,
   assertStringIncludes,
 } from "jsr:@std/assert";
 import { basename, join, resolve } from "jsr:@std/path";
@@ -100,7 +99,7 @@ async function getAcousticIDFingerprintTag(
   return tags?.ACOUSTID_FINGERPRINT || null;
 }
 
-async function getAcousticIDTag(filePath: string): Promise<string | null> {
+async function _getAcousticIDTag(filePath: string): Promise<string | null> {
   const tags = await getAcoustIDTags(filePath);
   return tags?.ACOUSTID_ID || null;
 }
@@ -636,23 +635,23 @@ Deno.test("API Key Integration", async (t) => {
     const envPath = resolve("src/.env");
     const tempEnvPath = resolve("src/.env.tmp");
     let envExists = false;
-    
+
     try {
       if (await exists(envPath, { isFile: true })) {
         envExists = true;
         await Deno.rename(envPath, tempEnvPath);
       }
-      
+
       // Run without API key (use --force if file already has tags)
       const existingTag = await getAcousticIDFingerprintTag(mp3File);
       const args = existingTag
         ? ["--force", basename(mp3File)]
         : [basename(mp3File)];
-      
+
       // Create a clean environment without ACOUSTID_API_KEY
       const cleanEnv = { ...Deno.env.toObject() };
       delete cleanEnv.ACOUSTID_API_KEY;
-      
+
       const result = await runAmusicScript(args, currentTestDir, cleanEnv);
 
       assertEquals(result.code, 0);

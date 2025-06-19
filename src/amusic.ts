@@ -618,7 +618,7 @@ if (import.meta.main) {
               );
               try {
                 await Deno.mkdir(outputFileDir, { recursive: true });
-              } catch (e) {
+              } catch (_e) {
                 // Directory might already exist, that's fine
               }
             }
