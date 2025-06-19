@@ -64,6 +64,7 @@ async function cleanupTestDir(testRunDir: string): Promise<void> {
 async function runAmusicScript(
   args: string[],
   cwd: string,
+  env?: Record<string, string>,
 ): Promise<AmusicRunResult> {
   const scriptPath = resolve(AMUSIC_SCRIPT_PATH); // Ensure absolute path to script
   const importMapPath = resolve("import_map.json");
@@ -81,6 +82,7 @@ async function runAmusicScript(
     cwd: cwd, // Critical: run the script from the directory containing the files
     stdout: "piped",
     stderr: "piped",
+    env: env, // Pass custom environment variables if provided
   });
   const { code, stdout, stderr } = await command.output();
   return {
@@ -91,7 +93,9 @@ async function runAmusicScript(
 }
 
 // Helper to get AcoustID tags using taglib-wasm
-async function getAcousticIDFingerprintTag(filePath: string): Promise<string | null> {
+async function getAcousticIDFingerprintTag(
+  filePath: string,
+): Promise<string | null> {
   const tags = await getAcoustIDTags(filePath);
   return tags?.ACOUSTID_FINGERPRINT || null;
 }
@@ -136,7 +140,7 @@ async function setAcousticIDTags(
 ): Promise<void> {
   // Import writeAcoustIDTags from tagging module
   const { writeAcoustIDTags } = await import("./lib/tagging.ts");
-  
+
   // Check if file exists
   if (!await exists(filePath, { isFile: true })) {
     throw new Error(`File not found at ${filePath}, cannot set tags.`);
@@ -169,7 +173,10 @@ Deno.test("amusic.ts Integration Tests", async (t) => {
 
     // 2. Run amusic.ts on the file
     // Pass only the basename as CWD is currentTestDir
-    const result = await runAmusicScript([...forceFlag, mp3BaseName], currentTestDir);
+    const result = await runAmusicScript(
+      [...forceFlag, mp3BaseName],
+      currentTestDir,
+    );
 
     // Debug output
     if (result.code !== 0) {
@@ -327,9 +334,13 @@ Deno.test("amusic.ts Integration Tests", async (t) => {
     // Check either stdout or stderr for the error message
     const combinedOutput = result.stdout + result.stderr;
     assert(
-      combinedOutput.includes(`Error: Path "${nonExistentFileName}" not found`) ||
-      combinedOutput.includes(`Error: File not found at "${nonExistentFileName}"`),
-      "Expected error message for non-existent file"
+      combinedOutput.includes(
+        `Error: Path "${nonExistentFileName}" not found`,
+      ) ||
+        combinedOutput.includes(
+          `Error: File not found at "${nonExistentFileName}"`,
+        ),
+      "Expected error message for non-existent file",
     );
     // if (result.code === 0) {
     //   console.warn("  NOTE: amusic.ts exited with code 0 even for a single non-existent file.");
@@ -352,7 +363,7 @@ Deno.test("amusic.ts Integration Tests", async (t) => {
       // 1. Check initial state of files
       const flacInitialTag = await getAcousticIDFingerprintTag(flacFile);
       const mp3InitialTag = await getAcousticIDFingerprintTag(mp3File);
-      
+
       // Both files probably have tags already, so we'll test with that reality
       // We'll use --force on one file to show processing
 
@@ -426,24 +437,24 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
   await t.step("--show-tags: Displays existing tags for a file", async () => {
     currentTestDir = await createTestRunDir("show_tags_existing");
     const audioFile = join(currentTestDir, "tagged.wav");
-    
+
     // Create a silent file and tag it
     await createSilentAudioFile(audioFile);
     await setAcousticIDTags(audioFile, "id12345", "fingerprint67890");
-    
+
     // Run amusic.ts with --show-tags
     const result = await runAmusicScript(
       ["--show-tags", basename(audioFile)],
       currentTestDir,
     );
-    
+
     // Debug
     if (result.code !== 0) {
       console.log("--show-tags test failed");
       console.log("stdout:", result.stdout);
       console.log("stderr:", result.stderr);
     }
-    
+
     // Assertions
     assertEquals(result.code, 0, "Script should exit successfully.");
     assertStringIncludes(
@@ -454,23 +465,26 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       result.stdout,
       `File: ${basename(audioFile)}`,
     );
-    assertStringIncludes(result.stdout, "AcoustID Fingerprint: fingerprint67890");
+    assertStringIncludes(
+      result.stdout,
+      "AcoustID Fingerprint: fingerprint67890",
+    );
     assertStringIncludes(result.stdout, "AcoustID ID: id12345");
-    
+
     await cleanupTestDir(currentTestDir);
   });
 
   await t.step("--show-tags: File with no AcoustID tags", async () => {
     currentTestDir = await createTestRunDir("show_tags_no_tags");
     const audioFile = join(currentTestDir, "notags.wav");
-    
+
     await createSilentAudioFile(audioFile);
-    
+
     const result = await runAmusicScript(
       ["--show-tags", basename(audioFile)],
       currentTestDir,
     );
-    
+
     assertEquals(result.code, 0);
     assertStringIncludes(
       result.stdout,
@@ -484,7 +498,7 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
     // Check that AcoustID tags are NOT present
     assert(!result.stdout.includes("AcoustID ID:"));
     assert(!result.stdout.includes("AcoustID Fingerprint:"));
-    
+
     await cleanupTestDir(currentTestDir);
   });
 
@@ -494,7 +508,7 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       currentTestDir = await createTestRunDir("dry_run_test");
       const [mp3File] = await setupTestFiles(currentTestDir, [SAMPLE_MP3]);
       const mp3BaseName = basename(mp3File);
-      
+
       // Check if file has tags initially
       const initialTag = await getAcousticIDFingerprintTag(mp3File);
       let forceFlag = [];
@@ -502,13 +516,13 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
         // File already has tags, use --force to test overwrite in dry-run
         forceFlag = ["--force"];
       }
-      
+
       // Run with --dry-run and dummy API key
       const result = await runAmusicScript(
         ["--dry-run", ...forceFlag, "--api-key", dummyApiKey, mp3BaseName],
         currentTestDir,
       );
-      
+
       // Assertions
       assertEquals(result.code, 0, "Dry run should exit successfully.");
       assertStringIncludes(result.stdout, `Processing file: ${mp3BaseName}`);
@@ -517,8 +531,11 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
         "ACTION: Generating AcoustID fingerprint...",
       );
       assertStringIncludes(result.stdout, "DRY RUN: Would write");
-      assertStringIncludes(result.stdout, "DRY RUN: Skipping actual tag writing.");
-      
+      assertStringIncludes(
+        result.stdout,
+        "DRY RUN: Skipping actual tag writing.",
+      );
+
       // Verify tags remain unchanged after dry run
       const finalTag = await getAcousticIDFingerprintTag(mp3File);
       assertEquals(
@@ -526,7 +543,7 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
         initialTag,
         "Tags should remain unchanged during a dry run.",
       );
-      
+
       await cleanupTestDir(currentTestDir);
     },
   );
@@ -538,23 +555,23 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       // Use a real sample file instead of creating a silent one
       const [audioFile] = await setupTestFiles(currentTestDir, [SAMPLE_MP3]);
       const baseName = basename(audioFile);
-      
+
       const initialFingerprint = await getAcousticIDFingerprintTag(audioFile);
       assertExists(initialFingerprint, "Sample file should have existing tags");
-      
+
       // Run with --dry-run and --force
       const result = await runAmusicScript(
         ["--dry-run", "--force", "--api-key", dummyApiKey, baseName],
         currentTestDir,
       );
-      
+
       assertEquals(result.code, 0);
       assertStringIncludes(
         result.stdout,
         "INFO: File already has AcoustID tags. --force option provided, proceeding to overwrite.",
       );
       assertStringIncludes(result.stdout, "DRY RUN: Would write");
-      
+
       // Verify tags remain unchanged
       const finalFingerprint = await getAcousticIDFingerprintTag(audioFile);
       assertEquals(
@@ -562,7 +579,7 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
         initialFingerprint,
         "Tags should remain unchanged in dry run mode.",
       );
-      
+
       await cleanupTestDir(currentTestDir);
     },
   );
@@ -575,15 +592,16 @@ Deno.test("Error Handling Edge Cases", async (t) => {
     currentTestDir = await createTestRunDir("directory_input");
     const subDir = join(currentTestDir, "subdir");
     await ensureDir(subDir);
-    
+
     const result = await runAmusicScript(["subdir"], currentTestDir);
-    
+
     const combinedOutput = result.stdout + result.stderr;
+    // When processing a directory with no audio files, amusic says "No supported audio files found"
     assertStringIncludes(
       combinedOutput,
-      `Error: Path "subdir" is not a file.`,
+      `Error: No supported audio files found.`,
     );
-    
+
     await cleanupTestDir(currentTestDir);
   });
 
@@ -591,20 +609,20 @@ Deno.test("Error Handling Edge Cases", async (t) => {
     currentTestDir = await createTestRunDir("unsupported_extension");
     const txtFile = join(currentTestDir, "readme.txt");
     await Deno.writeTextFile(txtFile, "This is not an audio file");
-    
+
     const result = await runAmusicScript(["readme.txt"], currentTestDir);
-    
-    // The script will process it and fpcalc will fail
-    assertStringIncludes(result.stdout, "Processing file: readme.txt");
-    // Check for fpcalc error in either stdout or stderr
+
+    // The script warns about unsupported extension and exits with "No supported audio files found"
     const combinedOutput = result.stdout + result.stderr;
-    assert(
-      combinedOutput.includes("ERROR: Failed to generate fingerprint") ||
-      combinedOutput.includes("WARNING: Could not generate fingerprint") ||
-      combinedOutput.includes("fpcalc error"),
-      "Expected fingerprint generation to fail for non-audio file"
+    assertStringIncludes(
+      combinedOutput,
+      `Warning: File "readme.txt" has unsupported extension; skipping.`,
     );
-    
+    assertStringIncludes(
+      combinedOutput,
+      "Error: No supported audio files found.",
+    );
+
     await cleanupTestDir(currentTestDir);
   });
 });
@@ -613,50 +631,68 @@ Deno.test("API Key Integration", async (t) => {
   await t.step("Missing API key warning", async () => {
     const currentTestDir = await createTestRunDir("no_api_key");
     const [mp3File] = await setupTestFiles(currentTestDir, [SAMPLE_MP3]);
+
+    // Temporarily rename the .env file to prevent it from being loaded
+    const envPath = resolve("src/.env");
+    const tempEnvPath = resolve("src/.env.tmp");
+    let envExists = false;
     
-    // Run without API key (use --force if file already has tags)
-    const existingTag = await getAcousticIDFingerprintTag(mp3File);
-    const args = existingTag ? ["--force", basename(mp3File)] : [basename(mp3File)];
-    const result = await runAmusicScript(args, currentTestDir);
-    
-    assertEquals(result.code, 0);
-    assertStringIncludes(
-      result.stdout,
-      "INFO: No AcoustID API key provided, skipping AcoustID ID tagging.",
-    );
-    
-    // If processed (not just skipped), should have fingerprint
-    // Note: Since we're not providing an API key, only fingerprint should be written
-    if (!existingTag || args.includes("--force")) {
+    try {
+      if (await exists(envPath, { isFile: true })) {
+        envExists = true;
+        await Deno.rename(envPath, tempEnvPath);
+      }
+      
+      // Run without API key (use --force if file already has tags)
+      const existingTag = await getAcousticIDFingerprintTag(mp3File);
+      const args = existingTag
+        ? ["--force", basename(mp3File)]
+        : [basename(mp3File)];
+      
+      // Create a clean environment without ACOUSTID_API_KEY
+      const cleanEnv = { ...Deno.env.toObject() };
+      delete cleanEnv.ACOUSTID_API_KEY;
+      
+      const result = await runAmusicScript(args, currentTestDir, cleanEnv);
+
+      assertEquals(result.code, 0);
+      // Check for the warning message that appears when no API key is provided
       assertStringIncludes(
         result.stdout,
-        "INFO: No AcoustID API key provided, skipping AcoustID ID tagging.",
+        "WARNING: No --api-key provided. Running in fingerprint-only mode (no AcoustID ID tagging).",
       );
+
+      await cleanupTestDir(currentTestDir);
+    } finally {
+      // Restore the .env file
+      if (envExists) {
+        await Deno.rename(tempEnvPath, envPath);
+      }
     }
-    
-    await cleanupTestDir(currentTestDir);
   });
 
   await t.step("Environment variable API key", async () => {
     const currentTestDir = await createTestRunDir("env_api_key");
     const [mp3File] = await setupTestFiles(currentTestDir, [SAMPLE_MP3]);
-    
+
     // Set environment variable (mock key)
     Deno.env.set("ACOUSTID_API_KEY", "env_test_key");
-    
+
     try {
       // Run without --api-key flag (should use env var)
       const existingTag = await getAcousticIDFingerprintTag(mp3File);
-      const args = existingTag ? ["--force", basename(mp3File)] : [basename(mp3File)];
+      const args = existingTag
+        ? ["--force", basename(mp3File)]
+        : [basename(mp3File)];
       const result = await runAmusicScript(args, currentTestDir);
-      
+
       assertEquals(result.code, 0);
       // Should attempt API lookup (will fail with mock key, but that's expected)
       assertStringIncludes(
         result.stdout,
         "ACTION: Looking up fingerprint with AcoustID API...",
       );
-      
+
       await cleanupTestDir(currentTestDir);
     } finally {
       // Clean up env var

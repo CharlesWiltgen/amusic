@@ -4,10 +4,20 @@ import { processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getComprehensiveMetadata } from "./lib/tagging.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
 import { calculateReplayGain } from "./lib/replaygain.ts";
-import { dirname, extname, fromFileUrl, join } from "jsr:@std/path";
+import {
+  encodeToM4A,
+  generateOutputPath,
+  isLosslessFormat,
+} from "./lib/encoding.ts";
+import { basename, dirname, extname, fromFileUrl, join } from "jsr:@std/path";
 // Auto-load environment variables from a .env file located alongside this script (allows ACOUSTID_API_KEY in .env)
 import { loadSync } from "jsr:@std/dotenv";
 const __dirname = dirname(fromFileUrl(import.meta.url));
+
+// Load version from deno.json
+const denoConfigPath = join(dirname(__dirname), "deno.json");
+const denoConfig = JSON.parse(await Deno.readTextFile(denoConfigPath));
+export const VERSION = denoConfig.version || "0.1.0";
 // Load environment variables from a .env file located alongside this script (e.g. ACOUSTID_API_KEY)
 try {
   loadSync({ export: true, envPath: join(__dirname, ".env") });
@@ -66,7 +76,7 @@ if (import.meta.main) {
 
   const program = new Command()
     .name("amusic")
-    .version("0.1.0")
+    .version(VERSION)
     .description(
       "Calculate ReplayGain and embed AcousticID fingerprints and IDs.",
     )
@@ -434,6 +444,227 @@ if (import.meta.main) {
         console.log("\nNOTE: This was a dry run. No files were modified.");
       }
     });
+
+  // Add encode subcommand
+  program
+    .command(
+      "encode <files...:string>",
+      "Encode audio files to M4A/AAC format. By default only encodes from lossless sources (WAV, FLAC, M4A).",
+    )
+    .option(
+      "--force-lossy-transcodes",
+      "Allow transcoding from lossy formats (MP3, OGG). Not recommended due to quality loss.",
+      { default: false },
+    )
+    .option(
+      "-o, --output-dir <dir:string>",
+      "Output directory for encoded files. Defaults to same directory as source files.",
+    )
+    .option(
+      "--flatten-output",
+      "When using --output-dir, put all output files in a single directory (disables directory structure preservation).",
+      { default: false },
+    )
+    .option(
+      "-q, --quiet",
+      "Suppress informational output. Errors are still shown.",
+      { default: false },
+    )
+    .option(
+      "--dry-run",
+      "Simulate encoding but do not write any files.",
+      { default: false },
+    )
+    .action(
+      async (
+        options: CommandOptions & {
+          forceLossyTranscodes?: boolean;
+          outputDir?: string;
+          flattenOutput?: boolean;
+        },
+        ...files: string[]
+      ) => {
+        if (!files || files.length === 0) {
+          console.error("Error: No files specified for encoding.");
+          Deno.exit(1);
+        }
+
+        // Helper function to recursively collect audio files
+        async function collectAudioFiles(path: string): Promise<string[]> {
+          const files: string[] = [];
+          try {
+            const info = await Deno.stat(path);
+            if (info.isDirectory) {
+              for await (const entry of Deno.readDir(path)) {
+                const fullPath = join(path, entry.name);
+                if (entry.isDirectory) {
+                  // Recursively process subdirectories
+                  const subFiles = await collectAudioFiles(fullPath);
+                  files.push(...subFiles);
+                } else if (entry.isFile) {
+                  const ext = extname(entry.name).toLowerCase().slice(1);
+                  if (SUPPORTED_EXTENSIONS.includes(ext)) {
+                    files.push(fullPath);
+                  }
+                }
+              }
+            } else if (info.isFile) {
+              const ext = extname(path).toLowerCase().slice(1);
+              if (SUPPORTED_EXTENSIONS.includes(ext)) {
+                files.push(path);
+              } else if (!options.quiet) {
+                console.error(
+                  `Warning: File "${path}" has unsupported extension; skipping.`,
+                );
+              }
+            }
+          } catch (e) {
+            if (e instanceof Deno.errors.NotFound) {
+              console.error(`Error: Path "${path}" not found; skipping.`);
+            } else {
+              console.error(
+                `Warning: Path "${path}" not found or inaccessible; skipping.`,
+              );
+            }
+          }
+          return files;
+        }
+
+        // Collect all files to process with their base directories
+        const filesToProcess: string[] = [];
+        const fileBaseMap = new Map<string, string>(); // Maps file path to its base input path
+
+        for (const fileOrDir of files) {
+          const collectedFiles = await collectAudioFiles(fileOrDir);
+          filesToProcess.push(...collectedFiles);
+
+          // Track base directory for each file to preserve structure
+          for (const file of collectedFiles) {
+            fileBaseMap.set(file, fileOrDir);
+          }
+        }
+
+        if (filesToProcess.length === 0) {
+          console.error("No valid audio files found to encode.");
+          Deno.exit(1);
+        }
+
+        // Create output directory if specified
+        if (options.outputDir && !options.dryRun) {
+          try {
+            await Deno.mkdir(options.outputDir, { recursive: true });
+          } catch (e) {
+            console.error(
+              `Error creating output directory: ${
+                e instanceof Error ? e.message : String(e)
+              }`,
+            );
+            Deno.exit(1);
+          }
+        }
+
+        let successCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
+
+        for (const file of filesToProcess) {
+          try {
+            // Skip if already M4A
+            if (extname(file).toLowerCase() === ".m4a") {
+              if (!options.quiet) {
+                console.log(`Skipping ${file} (already M4A format)`);
+              }
+              skippedCount++;
+              continue;
+            }
+
+            // Check if source is lossless
+            const isLossless = await isLosslessFormat(file);
+            if (!isLossless && !options.forceLossyTranscodes) {
+              console.error(
+                `Skipping ${file} (lossy format - use --force-lossy-transcodes to override)`,
+              );
+              skippedCount++;
+              continue;
+            }
+
+            const outputPath = generateOutputPath(
+              file,
+              options.outputDir,
+              !options.flattenOutput, // preserve structure by default unless --flatten-output is used
+              fileBaseMap.get(file),
+            );
+
+            // Check if output file already exists
+            try {
+              await Deno.stat(outputPath);
+              // File exists
+              if (!options.quiet) {
+                console.log(
+                  `Skipping ${file} (output file already exists: ${outputPath})`,
+                );
+              }
+              skippedCount++;
+              continue;
+            } catch {
+              // File doesn't exist, good to proceed
+            }
+
+            // Create output directory if needed
+            if (options.outputDir && !options.dryRun) {
+              const outputFileDir = outputPath.substring(
+                0,
+                outputPath.lastIndexOf("/"),
+              );
+              try {
+                await Deno.mkdir(outputFileDir, { recursive: true });
+              } catch (e) {
+                // Directory might already exist, that's fine
+              }
+            }
+
+            // Get track title for display
+            let trackDisplayName = basename(file);
+            try {
+              const metadata = await getComprehensiveMetadata(file);
+              if (metadata?.title) {
+                trackDisplayName = metadata.title;
+              }
+            } catch {
+              // Fall back to filename if metadata read fails
+            }
+
+            if (!options.quiet) {
+              console.log(`💿 Encoding '${trackDisplayName}'`);
+              console.log(`   ${file} -> ${outputPath}`);
+            }
+
+            await encodeToM4A(file, outputPath, {
+              forceLossyTranscodes: options.forceLossyTranscodes,
+              dryRun: options.dryRun,
+              outputDirectory: options.outputDir,
+            });
+
+            successCount++;
+          } catch (error) {
+            const errorMessage = error instanceof Error
+              ? error.message
+              : String(error);
+            console.error(`Error encoding ${file}: ${errorMessage}`);
+            failedCount++;
+          }
+        }
+
+        console.log("\n--- Encoding Complete ---");
+        console.log(`Successfully encoded: ${successCount}`);
+        console.log(`Skipped: ${skippedCount}`);
+        console.log(`Failed: ${failedCount}`);
+        console.log("-------------------------");
+        if (options.dryRun) {
+          console.log("\nNOTE: This was a dry run. No files were created.");
+        }
+      },
+    );
 
   await program.parse(Deno.args);
 }

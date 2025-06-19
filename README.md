@@ -60,18 +60,22 @@ this may be supported in a future release.
 
 ## Dependencies
 
-`amusic` requires only Deno to run. All audio metadata operations are handled by the built-in taglib-wasm library, and the required external tools are included as vendor binaries:
+`amusic` requires only Deno to run. All audio metadata operations are handled by
+the built-in taglib-wasm library, and the required external tools are included
+as vendor binaries:
 
 - **Deno**: The runtime for the script. Installation instructions can be found
   at [https://deno.land/](https://deno.land/).
-- **taglib-wasm**: Universal audio metadata library (included as npm dependency).
-  Handles all tag reading/writing operations for MP3, M4A/MP4, FLAC, OGG, WAV, and more.
+- **taglib-wasm**: Universal audio metadata library (included as npm
+  dependency). Handles all tag reading/writing operations for MP3, M4A/MP4,
+  FLAC, OGG, WAV, and more.
 - **fpcalc**: Used for generating AcoustID fingerprints. Native binaries are
   included in the `vendor` directory for all supported platforms.
-- **rsgain**: Used for ReplayGain analysis and metadata tagging. Native binaries are
-  included in the `vendor` directory for all supported platforms.
+- **rsgain**: Used for ReplayGain analysis and metadata tagging. Native binaries
+  are included in the `vendor` directory for all supported platforms.
 
-No external tools need to be installed - everything is self-contained within the project.
+No external tools need to be installed - everything is self-contained within the
+project.
 
 ## Installation
 
@@ -113,7 +117,8 @@ deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.t
 - `--allow-run`: Required to execute vendor binaries (`fpcalc` and `rsgain`).
 - `--allow-write`: Required to write updated audio files with new tags.
 - `--allow-env`: Required to read environment variables like `ACOUSTID_API_KEY`.
-- `--allow-net`: Required for AcoustID API lookups (optional, only needed when using API key).
+- `--allow-net`: Required for AcoustID API lookups (optional, only needed when
+  using API key).
 - `<file1> [file2 ...]`: One or more paths to audio files to be processed.
 
 **Options:**
