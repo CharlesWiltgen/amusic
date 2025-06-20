@@ -121,7 +121,7 @@ async function showTags(
       : `💿 ${albumKey} - ${albumArtist} - ${files.length} tracks`;
 
     console.log(albumHeader);
-    console.log(`\x1b[37m${"▔".repeat(albumHeader.length)}\x1b[0m\n`);
+    console.log(`\x1b[36m${"▔".repeat(albumHeader.length)}\x1b[0m`);
 
     for (const { path, metadata } of files) {
       const fileName = basename(path);
