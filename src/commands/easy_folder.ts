@@ -137,19 +137,6 @@ export async function easyCommandWithFolderAPI(
   }
 }
 
-/**
- * Alternative approach: Process albums in parallel for even better performance
- */
-export async function easyCommandParallel(
-  _options: CommandOptions,
-  _library: string,
-  _maxConcurrentAlbums: number = 2,
-): Promise<void> {
-  // Similar to above but process multiple albums concurrently
-  // This could be useful for systems with many CPU cores
-  // Implementation would use Promise.all with batching
-}
-
 function basename(path: string): string {
   return path.split("/").pop() || path;
 }
