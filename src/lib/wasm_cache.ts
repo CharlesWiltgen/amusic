@@ -1,4 +1,4 @@
-import { createCache } from "@deno/cache-dir";
+// Removed @deno/cache-dir import as we're using manual cache paths
 import { join } from "jsr:@std/path";
 import { ensureDir } from "jsr:@std/fs";
 
@@ -20,8 +20,12 @@ export class WasmCache {
   private metaPath: string;
 
   constructor() {
-    const cache = createCache();
-    this.cacheDir = join(cache.root, "amusic", "lib-cache");
+    // Use standard Deno cache directory
+    const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
+    const cacheBase = Deno.build.os === "windows"
+      ? join(home, "AppData", "Local", "deno")
+      : join(home, ".cache", "deno");
+    this.cacheDir = join(cacheBase, "amusic", "lib-cache");
     this.wasmPath = join(this.cacheDir, "taglib.wasm");
     this.metaPath = join(this.cacheDir, "taglib.wasm.meta.json");
   }
