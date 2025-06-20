@@ -4,18 +4,23 @@ import { WasmCache } from "./wasm_cache.ts";
 // TagLib instance - reuse for performance
 let taglibInstance: TagLib | null = null;
 
-// WASM cache instance
+// WASM cache instance (used for both dev and production)
 const wasmCache = new WasmCache();
 
-async function ensureTagLib(): Promise<TagLib> {
+export async function ensureTagLib(): Promise<TagLib> {
   if (!taglibInstance) {
-    // Get WASM data from cache (downloads if needed)
-    const wasmData = await wasmCache.getWasmData();
+    try {
+      // Get WASM data from cache (downloads if needed)
+      const wasmData = await wasmCache.getWasmData();
 
-    // Initialize TagLib with cached WASM data
-    taglibInstance = await TagLib.initialize({
-      wasmData: wasmData,
-    });
+      // Initialize with the binary data
+      taglibInstance = await TagLib.initialize({
+        wasmBinary: wasmData,
+      });
+    } catch (error) {
+      console.error("Failed to initialize TagLib:", error);
+      throw error;
+    }
   }
   return taglibInstance;
 }

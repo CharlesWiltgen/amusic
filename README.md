@@ -79,8 +79,42 @@ project.
 
 ## Installation
 
+### Option 1: Homebrew (macOS and Linux)
+
+Once the Homebrew tap is set up, you can install amusic with:
+
+```bash
+brew tap CharlesWiltgen/tap
+brew install amusic
+```
+
+To update to the latest version:
+
+```bash
+brew update
+brew upgrade amusic
+```
+
+### Option 2: Download Pre-built Binary
+
+Download the latest release for your platform from the
+[Releases](https://github.com/CharlesWiltgen/amusic/releases) page. Pre-built
+binaries are available for:
+
+- macOS (Apple Silicon M1/M2/M3 and Intel)
+- Linux (x86_64)
+- Windows (x86_64)
+
+Extract the archive and optionally move the binary to a location in your PATH.
+
+### Option 3: Build from Source
+
 1. Ensure Deno is installed.
-2. Clone this repository or download the `amusic.ts` script.
+2. Clone this repository:
+   ```bash
+   git clone https://github.com/CharlesWiltgen/amusic.git
+   cd amusic
+   ```
 3. (Optional) Build a standalone executable (includes the platform-specific
    vendor binaries):
 
@@ -190,6 +224,33 @@ features, please feel free to:
 
 When contributing code, please ensure you run `deno fmt` and `deno lint` before
 submitting.
+
+### Development
+
+```bash
+# Run from source
+deno task start [options] <files>
+
+# Run tests
+deno task test
+
+# Check formatting and linting
+deno task check
+
+# Fix formatting
+deno task fix
+
+# Build executable
+deno task build
+
+# Bump version (patch, minor, major, or specific version)
+deno task bump patch
+```
+
+### Releases
+
+Releases are automated via GitHub Actions. See [RELEASING.md](docs/RELEASING.md)
+for details.
 
 ## License
 

@@ -75,6 +75,7 @@ async function runAmusicScript(
       "--allow-write", // For writing tags, creating temp files
       "--allow-run", // For fpcalc, rsgain
       "--allow-env", // For environment variables
+      "--allow-net", // For taglib-wasm CDN access
       scriptPath,
       ...args,
     ],
@@ -460,15 +461,17 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       result.stdout,
       "Displaying comprehensive metadata:",
     );
+    // Check for the album header with emoji
     assertStringIncludes(
       result.stdout,
-      `File: ${basename(audioFile)}`,
+      "💿 (No Album) - (No Artist) (1 tracks)",
     );
+    // Check for the table format - the fingerprint will be truncated with "..."
     assertStringIncludes(
       result.stdout,
-      "AcoustID Fingerprint: fingerprint67890",
+      "fingerprint67890",
     );
-    assertStringIncludes(result.stdout, "AcoustID ID: id12345");
+    assertStringIncludes(result.stdout, "id12345");
 
     await cleanupTestDir(currentTestDir);
   });
@@ -489,14 +492,15 @@ Deno.test("--show-tags and --dry-run Functionality", async (t) => {
       result.stdout,
       "Displaying comprehensive metadata:",
     );
+    // Check for the album header with emoji
     assertStringIncludes(
       result.stdout,
-      `File: ${basename(audioFile)}`,
+      "💿 (No Album) - (No Artist) (1 tracks)",
     );
     // When no AcoustID tags exist, they won't be shown in the extended tags section
-    // Check that AcoustID tags are NOT present
-    assert(!result.stdout.includes("AcoustID ID:"));
-    assert(!result.stdout.includes("AcoustID Fingerprint:"));
+    // Check that AcoustID tags are NOT present (checking for the table cells)
+    assert(!result.stdout.includes("🆔 AcoustID"));
+    assert(!result.stdout.includes("🆔 Fingerprint"));
 
     await cleanupTestDir(currentTestDir);
   });

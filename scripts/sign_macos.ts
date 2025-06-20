@@ -33,6 +33,31 @@ try {
     "-",
     binaryPath,
   ]);
+
+  // Create/update symlink to /usr/local/bin
+  console.log("Creating/updating symlink to /usr/local/bin/amusic...");
+  const absoluteBinaryPath = await Deno.realPath(binaryPath);
+
+  // Ensure /usr/local/bin exists
+  try {
+    await Deno.mkdir("/usr/local/bin", { recursive: true });
+  } catch {
+    // Directory might already exist
+  }
+
+  // Remove existing symlink if it exists
+  try {
+    await Deno.remove("/usr/local/bin/amusic");
+  } catch {
+    // Symlink might not exist
+  }
+
+  // Create new symlink
+  await Deno.symlink(absoluteBinaryPath, "/usr/local/bin/amusic");
+  console.log(
+    "✅ Symlink created: /usr/local/bin/amusic -> " + absoluteBinaryPath,
+  );
+  console.log("You can now run 'amusic' from any terminal window!");
 } catch (err) {
   console.error("Error during macOS code-sign/unquarantine:", err);
   Deno.exit(1);

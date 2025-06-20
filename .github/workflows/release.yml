@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: amusic-macos-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: amusic-macos-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: amusic-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: amusic-windows-x86_64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Generate version file
+        run: deno run --allow-read --allow-write scripts/generate_version.ts
+
+      - name: Build executable
+        run: |
+          deno compile \
+            --allow-read \
+            --allow-write \
+            --allow-env \
+            --allow-run \
+            --allow-net \
+            --target ${{ matrix.target }} \
+            --include src/vendor \
+            --output dist/${{ matrix.name }} \
+            src/amusic.ts
+
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          tar -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
+          sha256sum ${{ matrix.name }}.tar.gz > ${{ matrix.name }}.tar.gz.sha256
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd dist
+          Compress-Archive -Path "${{ matrix.name }}.exe" -DestinationPath "${{ matrix.name }}.zip"
+          $hash = Get-FileHash "${{ matrix.name }}.zip" -Algorithm SHA256
+          "$($hash.Hash.ToLower())  ${{ matrix.name }}.zip" | Out-File -FilePath "${{ matrix.name }}.zip.sha256" -NoNewline
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}.tar.gz
+            dist/${{ matrix.name }}.tar.gz.sha256
+            dist/${{ matrix.name }}.zip
+            dist/${{ matrix.name }}.zip.sha256
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.tar.gz.sha256
+            artifacts/**/*.zip
+            artifacts/**/*.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

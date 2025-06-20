@@ -1,5 +1,6 @@
 // amusic.ts
 import { Command } from "@cliffy/command";
+import { Table } from "@cliffy/table";
 import { processAcoustIDTagging } from "./lib/acoustid.ts";
 import { getComprehensiveMetadata } from "./lib/tagging.ts";
 import { getVendorBinaryPath } from "./lib/vendor_tools.ts";
@@ -12,12 +13,8 @@ import {
 import { basename, dirname, extname, fromFileUrl, join } from "jsr:@std/path";
 // Auto-load environment variables from a .env file located alongside this script (allows ACOUSTID_API_KEY in .env)
 import { loadSync } from "jsr:@std/dotenv";
+import { VERSION } from "./version.ts";
 const __dirname = dirname(fromFileUrl(import.meta.url));
-
-// Load version from deno.json
-const denoConfigPath = join(dirname(__dirname), "deno.json");
-const denoConfig = JSON.parse(await Deno.readTextFile(denoConfigPath));
-export const VERSION = denoConfig.version || "0.1.0";
 // Load environment variables from a .env file located alongside this script (e.g. ACOUSTID_API_KEY)
 try {
   loadSync({ export: true, envPath: join(__dirname, ".env") });
@@ -139,128 +136,193 @@ if (import.meta.main) {
       // Handle --show-tags
       if (options.showTags) {
         if (!options.quiet) {
-          console.log("Displaying comprehensive metadata:");
+          console.log("Displaying comprehensive metadata:\n");
         }
+
+        // Group files by album for better organization
+        type FileMetadata = {
+          title?: string;
+          artist?: string;
+          album?: string;
+          comment?: string;
+          genre?: string;
+          year?: number;
+          track?: number;
+          duration?: number;
+          bitrate?: number;
+          sampleRate?: number;
+          channels?: number;
+          format?: string;
+          acoustIdFingerprint?: string;
+          acoustIdId?: string;
+          musicBrainzTrackId?: string;
+          musicBrainzReleaseId?: string;
+          musicBrainzArtistId?: string;
+          replayGainTrackGain?: number;
+          replayGainTrackPeak?: number;
+          replayGainAlbumGain?: number;
+          replayGainAlbumPeak?: number;
+          hasCoverArt?: boolean;
+          coverArtCount?: number;
+        };
+
+        const filesByAlbum = new Map<
+          string,
+          Array<{ path: string; metadata: FileMetadata }>
+        >();
+
         for (const file of filesToProcess) {
           try {
             const metadata = await getComprehensiveMetadata(file);
-            console.log(`\nFile: ${file}`);
-
             if (metadata) {
-              // Basic tags
-              console.log("\n  Basic Tags:");
-              console.log(`    Title: ${metadata.title || "(none)"}`);
-              console.log(`    Artist: ${metadata.artist || "(none)"}`);
-              console.log(`    Album: ${metadata.album || "(none)"}`);
-              console.log(`    Year: ${metadata.year || "(none)"}`);
-              console.log(`    Track: ${metadata.track || "(none)"}`);
-              console.log(`    Genre: ${metadata.genre || "(none)"}`);
-              if (metadata.comment) {
-                console.log(`    Comment: ${metadata.comment}`);
+              // For compilation albums (Various Artists), group by album only
+              const albumKey = metadata.album || "Unknown Album";
+              if (!filesByAlbum.has(albumKey)) {
+                filesByAlbum.set(albumKey, []);
               }
-
-              // Audio properties
-              console.log("\n  Audio Properties:");
-              console.log(`    Format: ${metadata.format || "Unknown"}`);
-              console.log(
-                `    Duration: ${
-                  metadata.duration ? `${metadata.duration}s` : "(none)"
-                }`,
-              );
-              console.log(
-                `    Bitrate: ${
-                  metadata.bitrate ? `${metadata.bitrate} kbps` : "(none)"
-                }`,
-              );
-              console.log(
-                `    Sample Rate: ${
-                  metadata.sampleRate ? `${metadata.sampleRate} Hz` : "(none)"
-                }`,
-              );
-              console.log(`    Channels: ${metadata.channels || "(none)"}`);
-
-              // Extended tags
-              if (
-                metadata.acoustIdFingerprint || metadata.acoustIdId ||
-                metadata.musicBrainzTrackId || metadata.musicBrainzReleaseId ||
-                metadata.musicBrainzArtistId
-              ) {
-                console.log("\n  Extended Tags:");
-                if (metadata.acoustIdId) {
-                  console.log(`    AcoustID ID: ${metadata.acoustIdId}`);
-                }
-                if (metadata.acoustIdFingerprint) {
-                  console.log(
-                    `    AcoustID Fingerprint: ${
-                      metadata.acoustIdFingerprint.substring(0, 50)
-                    }...`,
-                  );
-                }
-                if (metadata.musicBrainzTrackId) {
-                  console.log(
-                    `    MusicBrainz Track ID: ${metadata.musicBrainzTrackId}`,
-                  );
-                }
-                if (metadata.musicBrainzReleaseId) {
-                  console.log(
-                    `    MusicBrainz Release ID: ${metadata.musicBrainzReleaseId}`,
-                  );
-                }
-                if (metadata.musicBrainzArtistId) {
-                  console.log(
-                    `    MusicBrainz Artist ID: ${metadata.musicBrainzArtistId}`,
-                  );
-                }
-              }
-
-              // ReplayGain
-              if (
-                metadata.replayGainTrackGain !== undefined ||
-                metadata.replayGainAlbumGain !== undefined
-              ) {
-                console.log("\n  ReplayGain:");
-                if (metadata.replayGainTrackGain !== undefined) {
-                  console.log(
-                    `    Track Gain: ${metadata.replayGainTrackGain} dB`,
-                  );
-                }
-                if (metadata.replayGainTrackPeak !== undefined) {
-                  console.log(
-                    `    Track Peak: ${metadata.replayGainTrackPeak}`,
-                  );
-                }
-                if (metadata.replayGainAlbumGain !== undefined) {
-                  console.log(
-                    `    Album Gain: ${metadata.replayGainAlbumGain} dB`,
-                  );
-                }
-                if (metadata.replayGainAlbumPeak !== undefined) {
-                  console.log(
-                    `    Album Peak: ${metadata.replayGainAlbumPeak}`,
-                  );
-                }
-              }
-
-              // Cover art
-              console.log("\n  Cover Art:");
-              console.log(
-                `    Has Cover: ${metadata.hasCoverArt ? "Yes" : "No"}`,
-              );
-              if (metadata.hasCoverArt && metadata.coverArtCount) {
-                console.log(`    Cover Count: ${metadata.coverArtCount}`);
-              }
-            } else {
-              console.log("  No metadata found or error reading file.");
+              filesByAlbum.get(albumKey)!.push({ path: file, metadata });
             }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            console.error(`\nFile: ${file}`);
-            console.error(`  Error reading metadata: ${msg}`);
+            console.error(`Error reading metadata from ${file}: ${msg}`);
           }
         }
+
+        // Display metadata grouped by album
+        for (const [albumKey, files] of filesByAlbum) {
+          // Sort files by track number
+          files.sort((a, b) =>
+            (a.metadata.track || 0) - (b.metadata.track || 0)
+          );
+
+          // Get album artist (if all tracks have same artist) or "Various Artists"
+          const artists = new Set(
+            files.map((f) => f.metadata.artist).filter(Boolean),
+          );
+          const albumArtist = artists.size === 1
+            ? [...artists][0]
+            : "Various Artists";
+
+          // Get common album info from first file
+          const firstFile = files[0];
+          const year = firstFile.metadata.year;
+
+          const albumHeader = year
+            ? `💿 ${albumKey} - ${albumArtist} (${year}) - ${files.length} tracks`
+            : `💿 ${albumKey} - ${albumArtist} - ${files.length} tracks`;
+
+          console.log(albumHeader);
+          // Use box drawing character with color 7 (light gray)
+          console.log(`\x1b[37m${"▔".repeat(albumHeader.length)}\x1b[0m\n`);
+
+          for (const { path, metadata } of files) {
+            const fileName = basename(path);
+            console.log(`${metadata.title || fileName}`);
+
+            // Create table data
+            const tableData: string[][] = [];
+
+            // Basic metadata
+            tableData.push(["🎵 Title", metadata.title || "(none)"]);
+            tableData.push(["🎤 Artist", metadata.artist || "(none)"]);
+
+            // Combined line: Year | Track | Genre
+            const yearTrackGenre = [
+              metadata.year?.toString() || "(none)",
+              metadata.track?.toString() || "(none)",
+              metadata.genre || "(none)",
+            ].join(" | ");
+            tableData.push(["📅 Year/Track/Genre", yearTrackGenre]);
+
+            // Audio properties - combined lines
+            const formatBitrate = [
+              metadata.format || "Unknown",
+              metadata.bitrate ? `${metadata.bitrate} kbps` : "(none)",
+            ].join(" | ");
+            tableData.push(["🎧 Format/Bitrate", formatBitrate]);
+
+            // Format duration as M:SS
+            let durationStr = "(none)";
+            if (metadata.duration) {
+              const minutes = Math.floor(metadata.duration / 60);
+              const seconds = metadata.duration % 60;
+              durationStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+            }
+            tableData.push(["⏱️ Duration", durationStr.trim()]);
+
+            // Format channels as Stereo/Mono/etc
+            let channelsStr = "(none)";
+            if (metadata.channels === 2) {
+              channelsStr = "Stereo";
+            } else if (metadata.channels === 1) {
+              channelsStr = "Mono";
+            } else if (metadata.channels) {
+              channelsStr = `${metadata.channels} ch`;
+            }
+
+            const sampleRateChannels = [
+              metadata.sampleRate ? `${metadata.sampleRate} Hz` : "(none)",
+              channelsStr,
+            ].join(" | ");
+            tableData.push(["📊 Sample Rate/Channels", sampleRateChannels]);
+
+            // Dynamics (ReplayGain) - combined lines
+            const trackDynamics: string[] = [];
+            const albumDynamics: string[] = [];
+
+            if (metadata.replayGainTrackGain !== undefined) {
+              trackDynamics.push(`Gain: ${metadata.replayGainTrackGain} dB`);
+            }
+            if (metadata.replayGainTrackPeak !== undefined) {
+              trackDynamics.push(`Peak: ${metadata.replayGainTrackPeak} dB`);
+            }
+            if (trackDynamics.length > 0) {
+              tableData.push(["📈 Track Dynamics", trackDynamics.join(" | ")]);
+            }
+
+            if (metadata.replayGainAlbumGain !== undefined) {
+              albumDynamics.push(`Gain: ${metadata.replayGainAlbumGain} dB`);
+            }
+            if (metadata.replayGainAlbumPeak !== undefined) {
+              albumDynamics.push(`Peak: ${metadata.replayGainAlbumPeak} dB`);
+            }
+            if (albumDynamics.length > 0) {
+              tableData.push(["📈 Album Dynamics", albumDynamics.join(" | ")]);
+            }
+
+            // Cover art
+            tableData.push([
+              "🖼️ Cover Art",
+              (metadata.hasCoverArt
+                ? `Yes (${metadata.coverArtCount} images)`.trim()
+                : "No").trim(),
+            ]);
+
+            // Extended tags (if present)
+            if (metadata.acoustIdId) {
+              tableData.push(["🔍 AcoustID", metadata.acoustIdId]);
+            }
+            if (metadata.musicBrainzTrackId) {
+              tableData.push(["🎵 MB Track ID", metadata.musicBrainzTrackId]);
+            }
+
+            // Create and display table without borders
+            const table = new Table()
+              .body(tableData)
+              .indent(0)
+              .padding(2)
+              .border(false);
+
+            console.log(table.toString());
+            console.log(); // Empty line between tracks
+          }
+          console.log(); // Extra line between albums
+        }
+
         return; // Exit after showing tags
       }
 
+      // Original file processing logic continues...
       if (filesToProcess.length === 0) {
         console.error("Error: No supported audio files found.");
         Deno.exit(1);

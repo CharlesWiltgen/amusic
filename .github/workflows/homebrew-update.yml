@@ -1,0 +1,95 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub CLI
+        run: |
+          type gh || (type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y))
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Get release information
+        id: release_info
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the latest release tag
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Download checksums
+          gh release download "$TAG" -p "*.sha256" -D /tmp/checksums
+
+          # Extract SHA256 values
+          SHA256_MACOS_ARM64=$(cat /tmp/checksums/amusic-macos-arm64.tar.gz.sha256 | awk '{print $1}')
+          SHA256_MACOS_X86_64=$(cat /tmp/checksums/amusic-macos-x86_64.tar.gz.sha256 | awk '{print $1}')
+          SHA256_LINUX_X86_64=$(cat /tmp/checksums/amusic-linux-x86_64.tar.gz.sha256 | awk '{print $1}')
+
+          echo "sha256_macos_arm64=$SHA256_MACOS_ARM64" >> $GITHUB_OUTPUT
+          echo "sha256_macos_x86_64=$SHA256_MACOS_X86_64" >> $GITHUB_OUTPUT
+          echo "sha256_linux_x86_64=$SHA256_LINUX_X86_64" >> $GITHUB_OUTPUT
+
+      - name: Generate Homebrew formula
+        run: |
+          GITHUB_OWNER="${{ github.repository_owner }}"
+          VERSION="${{ steps.release_info.outputs.version }}"
+          SHA256_MACOS_ARM64="${{ steps.release_info.outputs.sha256_macos_arm64 }}"
+          SHA256_MACOS_X86_64="${{ steps.release_info.outputs.sha256_macos_x86_64 }}"
+          SHA256_LINUX_X86_64="${{ steps.release_info.outputs.sha256_linux_x86_64 }}"
+
+          # Generate the formula from template
+          sed -e "s/{{GITHUB_OWNER}}/$GITHUB_OWNER/g" \
+              -e "s/{{VERSION}}/$VERSION/g" \
+              -e "s/{{SHA256_MACOS_ARM64}}/$SHA256_MACOS_ARM64/g" \
+              -e "s/{{SHA256_MACOS_X86_64}}/$SHA256_MACOS_X86_64/g" \
+              -e "s/{{SHA256_LINUX_X86_64}}/$SHA256_LINUX_X86_64/g" \
+              homebrew/amusic.rb.template > amusic.rb
+
+      - name: Create Pull Request to homebrew-tap
+        env:
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone the tap repository
+          GITHUB_OWNER="${{ github.repository_owner }}"
+          gh repo clone "$GITHUB_OWNER/homebrew-tap" /tmp/homebrew-tap || {
+            echo "Homebrew tap repository not found. Please create $GITHUB_OWNER/homebrew-tap first."
+            exit 1
+          }
+
+          cd /tmp/homebrew-tap
+
+          # Create a new branch
+          BRANCH="update-amusic-${{ steps.release_info.outputs.version }}"
+          git checkout -b "$BRANCH"
+
+          # Copy the updated formula
+          cp "${{ github.workspace }}/amusic.rb" Formula/amusic.rb
+
+          # Commit and push
+          git add Formula/amusic.rb
+          git commit -m "Update amusic to version ${{ steps.release_info.outputs.version }}"
+          git push origin "$BRANCH"
+
+          # Create pull request
+          gh pr create \
+            --title "Update amusic to version ${{ steps.release_info.outputs.version }}" \
+            --body "Automated update of amusic formula to version ${{ steps.release_info.outputs.version }}" \
+            --base main \
+            --head "$BRANCH"

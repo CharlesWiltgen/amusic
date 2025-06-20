@@ -1,0 +1,33 @@
+class Amusic < Formula
+  desc "Command-line music utility showcasing taglib-wasm capabilities"
+  homepage "https://github.com/{{GITHUB_OWNER}}/amusic"
+  version "{{VERSION}}"
+  license "MIT"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/{{GITHUB_OWNER}}/amusic/releases/download/v{{VERSION}}/amusic-macos-arm64.tar.gz"
+      sha256 "{{SHA256_MACOS_ARM64}}"
+    else
+      url "https://github.com/{{GITHUB_OWNER}}/amusic/releases/download/v{{VERSION}}/amusic-macos-x86_64.tar.gz"
+      sha256 "{{SHA256_MACOS_X86_64}}"
+    end
+  end
+
+  on_linux do
+    url "https://github.com/{{GITHUB_OWNER}}/amusic/releases/download/v{{VERSION}}/amusic-linux-x86_64.tar.gz"
+    sha256 "{{SHA256_LINUX_X86_64}}"
+  end
+
+  def install
+    if OS.mac?
+      bin.install Hardware::CPU.arm? ? "amusic-macos-arm64" : "amusic-macos-x86_64" => "amusic"
+    else
+      bin.install "amusic-linux-x86_64" => "amusic"
+    end
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/amusic --version")
+  end
+end

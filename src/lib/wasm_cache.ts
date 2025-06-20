@@ -39,7 +39,6 @@ export class WasmCache {
       // Validate cache with CDN
       const isValid = await this.validateCache();
       if (isValid) {
-        console.log("Using cached taglib.wasm");
         return cachedData;
       }
     }

@@ -86,6 +86,12 @@ web_modules/
 # Deno build output directory
 dist/
 
+# Generated version file
+src/version.ts
+
+# WASM file (legacy)
+taglib.wasm
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

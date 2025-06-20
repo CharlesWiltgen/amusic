@@ -1,7 +1,7 @@
 // encoding.ts
 import { extname } from "jsr:@std/path";
-import { TagLib } from "taglib-wasm";
-import { VERSION } from "../amusic.ts";
+import { VERSION } from "../version.ts";
+import { ensureTagLib } from "./tagging.ts";
 
 const LOSSLESS_FORMATS = ["wav", "flac"]; // m4a removed - will check codec
 const LOSSY_FORMATS = ["mp3", "ogg"];
@@ -109,11 +109,9 @@ export async function isLosslessFormat(filePath: string): Promise<boolean> {
 
   // For M4A/MP4, we need to check if it's Apple Lossless (ALAC) or AAC
   if (AMBIGUOUS_FORMATS.includes(ext)) {
+    const taglib = await ensureTagLib();
     let audioFile = null;
     try {
-      // Initialize TagLib
-      const taglib = await TagLib.initialize();
-
       // Read the file
       const fileData = await Deno.readFile(filePath);
       audioFile = await taglib.open(fileData);
@@ -202,7 +200,7 @@ async function copyMetadata(
   sourcePath: string,
   destPath: string,
 ): Promise<void> {
-  const taglib = await TagLib.initialize();
+  const taglib = await ensureTagLib();
   let sourceFile = null;
   let destFile = null;
 
