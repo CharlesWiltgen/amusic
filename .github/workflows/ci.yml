@@ -41,6 +41,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
+      - name: Generate version file
+        run: deno run --allow-read --allow-write scripts/generate_version.ts
+
       - name: Run Deno Tests
         run: deno test --import-map=import_map.json --no-check --allow-net --allow-read --allow-run --allow-write --allow-env
         # Note: --allow-net might be needed if any test makes network requests.
