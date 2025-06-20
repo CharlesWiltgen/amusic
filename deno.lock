@@ -17,7 +17,7 @@
     "jsr:@std/text@~1.0.7": "1.0.14",
     "npm:npm-check-updates@*": "18.0.1",
     "npm:ora@8.1.1": "8.1.1",
-    "npm:taglib-wasm@0.4.1": "0.4.1_typescript@5.8.3"
+    "npm:taglib-wasm@0.4.2": "0.4.2_typescript@5.8.3"
   },
   "jsr": {
     "@cliffy/command@1.0.0-rc.7": {
@@ -171,8 +171,8 @@
         "ansi-regex"
       ]
     },
-    "taglib-wasm@0.4.1_typescript@5.8.3": {
-      "integrity": "sha512-Enc6XeETkk2CyDchonoOKogipijHbhQ1TKMNg0xWCQFcS+ht89fg3TmYs9DcnaDJoGn8IYl68BGCgSLGht4PYw==",
+    "taglib-wasm@0.4.2_typescript@5.8.3": {
+      "integrity": "sha512-JjAfDj3rQIKs567iSu+vJU3qykXKDvJJF/F5LvyxXuaz07bS9cpolOHZB84T3ZZy82oR3966kKKrP0ltyjX/Fg==",
       "dependencies": [
         "typescript"
       ]
@@ -187,7 +187,7 @@
       "jsr:@cliffy/command@1.0.0-rc.7",
       "jsr:@cliffy/table@1.0.0-rc.7",
       "jsr:@deno/cache-dir@0.14.4",
-      "npm:taglib-wasm@0.4.1"
+      "npm:taglib-wasm@0.4.2"
     ]
   }
 }

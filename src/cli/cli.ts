@@ -8,7 +8,7 @@ import { loadSync } from "jsr:@std/dotenv";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 
-export function setupCLI(): Command {
+export function setupCLI() {
   // Load environment variables from .env file
   try {
     loadSync({ export: true, envPath: join(__dirname, "..", ".env") });

@@ -6,8 +6,18 @@ import type { CommandOptions } from "../types/command.ts";
 import { ensureCommandExists } from "../utils/command.ts";
 import { ProcessingStats } from "../utils/processing_stats.ts";
 import { exitWithError, validateDirectory } from "../utils/console_output.ts";
+import { easyCommandWithFolderAPI } from "./easy_folder.ts";
 
-export async function easyCommand(
+export function easyCommand(
+  options: CommandOptions,
+  library: string,
+): Promise<void> {
+  // Use the new Folder API version for better performance
+  return easyCommandWithFolderAPI(options, library);
+}
+
+// Original implementation kept for reference
+export async function easyCommandOriginal(
   options: CommandOptions,
   library: string,
 ): Promise<void> {
