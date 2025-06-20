@@ -1,6 +1,6 @@
-import { Table } from "@cliffy/table";
+import { Table } from "jsr:@cliffy/table@1.0.0-rc.7";
+import ora from "npm:ora@8.1.1";
 import { processAcoustIDTagging } from "../lib/acoustid.ts";
-import { getComprehensiveMetadata } from "../lib/tagging.ts";
 import { collectAudioFiles } from "../utils/file_discovery.ts";
 import type { CommandOptions } from "../types/command.ts";
 import { ProcessingStats } from "../utils/processing_stats.ts";
@@ -56,7 +56,7 @@ async function showTags(
     console.log("Displaying comprehensive metadata:\n");
   }
 
-  type FileMetadata = {
+  interface FileMetadata {
     title?: string;
     artist?: string;
     album?: string;
@@ -80,16 +80,52 @@ async function showTags(
     replayGainAlbumPeak?: number;
     hasCoverArt?: boolean;
     coverArtCount?: number;
-  };
+  }
 
   const filesByAlbum = new Map<
     string,
     Array<{ path: string; metadata: FileMetadata }>
   >();
 
+  // Show progress while reading metadata
+  const totalFiles = filesToProcess.length;
+  let processedCount = 0;
+  let errorCount = 0;
+
+  // Create spinner with static text and dynamic suffix
+  const spinner = ora({
+    text: "Reading metadata",
+    suffixText: `0/${totalFiles} (0%)`,
+    spinner: "dots",
+  }).start();
+
+  // Create a wrapper function that periodically yields
+  async function getMetadataWithYield(file: string) {
+    // Import the function we need
+    const { getComprehensiveMetadata } = await import("../lib/tagging.ts");
+
+    // Start the metadata reading
+    const metadataPromise = getComprehensiveMetadata(file);
+
+    // Create a yield loop that runs until the promise resolves
+    let done = false;
+    metadataPromise.finally(() => {
+      done = true;
+    });
+
+    // Yield periodically while waiting
+    while (!done) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    // Return the actual result
+    return await metadataPromise;
+  }
+
+  // Process files with frequent yields
   for (const file of filesToProcess) {
     try {
-      const metadata = await getComprehensiveMetadata(file);
+      const metadata = await getMetadataWithYield(file);
       if (metadata) {
         const albumKey = metadata.album || "Unknown Album";
         if (!filesByAlbum.has(albumKey)) {
@@ -97,10 +133,25 @@ async function showTags(
         }
         filesByAlbum.get(albumKey)!.push({ path: file, metadata });
       }
+      processedCount++;
+
+      // Update progress
+      const progress = Math.round((processedCount / totalFiles) * 100);
+      spinner.suffixText = `${processedCount}/${totalFiles} (${progress}%)`;
     } catch (e) {
+      errorCount++;
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`Error reading metadata from ${file}: ${msg}`);
+      console.error(`\nError reading metadata from ${file}: ${msg}`);
     }
+  }
+
+  // Stop spinner when done
+  if (errorCount > 0) {
+    spinner.warn(
+      `Read metadata from ${processedCount} files (${errorCount} errors)`,
+    );
+  } else {
+    spinner.succeed(`Successfully read metadata from ${totalFiles} files`);
   }
 
   for (const [albumKey, files] of filesByAlbum) {
