@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 
-import { Command } from "@cliffy/command";
+import { Command } from "jsr:@cliffy/command@1.0.0-rc.7";
 import { parse } from "https://deno.land/std@0.224.0/semver/mod.ts";
 import { increment } from "https://deno.land/std@0.224.0/semver/increment.ts";
 

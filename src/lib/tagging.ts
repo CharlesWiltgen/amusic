@@ -1,5 +1,6 @@
 import { TagLib } from "taglib-wasm";
 import { WasmCache } from "./wasm_cache.ts";
+import { readFileAsync } from "../utils/async-file-reader.ts";
 
 // TagLib instance - reuse for performance
 let taglibInstance: TagLib | null = null;
@@ -37,7 +38,7 @@ export async function getAcoustIDTags(
   let audioFile = null;
   try {
     // Read file data and open with taglib-wasm
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
@@ -83,7 +84,7 @@ export async function getAudioDuration(filePath: string): Promise<number> {
   let audioFile = null;
   try {
     // Read file data and open with taglib-wasm
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     const properties = audioFile.audioProperties();
@@ -119,7 +120,7 @@ export async function writeAcoustIDTags(
   let audioFile = null;
   try {
     // Read file data and open with taglib-wasm
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     // Use the built-in AcoustID methods
@@ -171,7 +172,7 @@ export async function getReplayGainTags(
 
   let audioFile = null;
   try {
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     const tags: {
@@ -224,7 +225,7 @@ export async function writeReplayGainTags(
 
   let audioFile = null;
   try {
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     // Set ReplayGain values
@@ -312,7 +313,7 @@ export async function getComprehensiveMetadata(
 
   let audioFile = null;
   try {
-    const fileData = await Deno.readFile(filePath);
+    const fileData = await readFileAsync(filePath);
     audioFile = await taglib.open(fileData);
 
     const metadata: Record<string, unknown> = {};
