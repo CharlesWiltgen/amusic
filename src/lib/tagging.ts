@@ -27,6 +27,36 @@ export async function ensureTagLib(): Promise<TagLib> {
 }
 
 /**
+ * Helper to open a file with smart partial loading based on file size
+ * @param taglib The TagLib instance
+ * @param filePath Path to the file
+ * @param forWriting Whether the file will be modified (disables partial loading)
+ * @returns The opened audio file
+ */
+async function openFileWithSmartLoading(
+  taglib: TagLib,
+  filePath: string,
+  forWriting = false,
+) {
+  const fileData = await readFileAsync(filePath);
+
+  // Skip partial loading for write operations
+  if (forWriting) {
+    return await taglib.open(fileData);
+  }
+
+  // Check file size for smart partial loading
+  const fileInfo = await Deno.stat(filePath);
+  const usePartialLoading = fileInfo.size > 3 * 1024 * 1024; // 3MB threshold
+
+  return await taglib.open(fileData, {
+    partial: usePartialLoading,
+    maxHeaderSize: 2 * 1024 * 1024, // 2MB header
+    maxFooterSize: 256 * 1024, // 256KB footer
+  });
+}
+
+/**
  * Reads ACOUSTID_FINGERPRINT and ACOUSTID_ID tags from a file using Taglib-Wasm.
  * Returns an object with the tags or null if not found or an error occurs.
  */
@@ -37,9 +67,8 @@ export async function getAcoustIDTags(
 
   let audioFile = null;
   try {
-    // Read file data and open with taglib-wasm
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Use smart partial loading for read operations
+    audioFile = await openFileWithSmartLoading(taglib, filePath);
 
     const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
 
@@ -83,9 +112,8 @@ export async function getAudioDuration(filePath: string): Promise<number> {
 
   let audioFile = null;
   try {
-    // Read file data and open with taglib-wasm
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Use smart partial loading for read operations
+    audioFile = await openFileWithSmartLoading(taglib, filePath);
 
     const properties = audioFile.audioProperties();
     return properties?.length || 0;
@@ -119,9 +147,8 @@ export async function writeAcoustIDTags(
 
   let audioFile = null;
   try {
-    // Read file data and open with taglib-wasm
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Use full file loading for write operations
+    audioFile = await openFileWithSmartLoading(taglib, filePath, true);
 
     // Use the built-in AcoustID methods
     audioFile.setAcoustIdFingerprint(fingerprint);
@@ -172,8 +199,8 @@ export async function getReplayGainTags(
 
   let audioFile = null;
   try {
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Use smart partial loading for read operations
+    audioFile = await openFileWithSmartLoading(taglib, filePath);
 
     const tags: {
       trackGain?: number;
@@ -313,8 +340,8 @@ export async function getComprehensiveMetadata(
 
   let audioFile = null;
   try {
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Use smart partial loading for read operations
+    audioFile = await openFileWithSmartLoading(taglib, filePath);
 
     const metadata: Record<string, unknown> = {};
 
