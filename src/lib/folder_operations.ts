@@ -4,17 +4,20 @@
  */
 
 import {
+  type AudioFileMetadata,
+  type FolderScanOptions,
+  type FolderScanResult,
+  scanFolder as taglibScanFolder,
+} from "jsr:@charlesw/taglib-wasm";
+import { SUPPORTED_EXTENSIONS } from "../utils/file_discovery.ts";
+import { ensureTagLib } from "./taglib_init.ts";
+
+// Import remaining folder API functions
+import {
   exportFolderMetadata,
   findDuplicates,
-  scanFolder,
   updateFolderTags,
-} from "taglib-wasm/folder";
-import type {
-  AudioFileMetadata,
-  FolderScanOptions,
-  FolderScanResult,
-} from "taglib-wasm/folder";
-import { SUPPORTED_EXTENSIONS } from "../utils/file_discovery.ts";
+} from "jsr:@charlesw/taglib-wasm";
 
 /**
  * Scan a directory for audio files and retrieve their metadata
@@ -41,7 +44,9 @@ export async function scanMusicDirectory(
     continueOnError: true,
   };
 
-  return await scanFolder(directory, scanOptions);
+  // Ensure TagLib is initialized before using folder API
+  await ensureTagLib();
+  return await taglibScanFolder(directory, scanOptions);
 }
 
 /**
@@ -91,6 +96,8 @@ export async function batchUpdateTags(
     tags: Record<string, unknown>;
   }>,
 ) {
+  // Ensure TagLib is initialized before using folder API
+  await ensureTagLib();
   return await updateFolderTags(updates);
 }
 
@@ -101,6 +108,8 @@ export async function findDuplicateTracks(
   directory: string,
   criteria: string[] = ["artist", "title"],
 ) {
+  // Ensure TagLib is initialized before using folder API
+  await ensureTagLib();
   // @ts-ignore - criteria is correctly typed for taglib-wasm
   return await findDuplicates(directory, criteria);
 }
@@ -112,6 +121,8 @@ export async function exportLibraryMetadata(
   directory: string,
   outputPath: string,
 ): Promise<void> {
+  // Ensure TagLib is initialized before using folder API
+  await ensureTagLib();
   await exportFolderMetadata(directory, outputPath);
 }
 

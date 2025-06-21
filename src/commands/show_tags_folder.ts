@@ -1,12 +1,35 @@
-import { Table } from "jsr:@cliffy/table@1.0.0-rc.7";
-import ora from "npm:ora@8.1.1";
 import { dirname } from "jsr:@std/path";
-import {
-  formatMetadataForDisplay,
-  groupFilesByAlbum,
-  scanMusicDirectory,
-} from "../lib/folder_operations.ts";
-import type { AudioFileMetadata } from "taglib-wasm/folder";
+import ora from "npm:ora@8.1.1";
+import { scanMusicDirectory } from "../lib/folder_operations.ts";
+import { formatChannels, formatDuration } from "../utils/format.ts";
+
+interface FileMetadata {
+  path: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  year?: number;
+  track?: number;
+  genre?: string;
+  comment?: string;
+
+  // Audio properties
+  duration?: number;
+  bitrate?: number;
+  sampleRate?: number;
+  channels?: number;
+  format?: string;
+
+  // Extended metadata
+  replayGainTrackGain?: string;
+  replayGainTrackPeak?: string;
+  replayGainAlbumGain?: string;
+  replayGainAlbumPeak?: string;
+  acoustIdFingerprint?: string;
+  acoustIdId?: string;
+  hasCoverArt?: boolean;
+  coverArtCount?: number;
+}
 
 /**
  * Display tags using the new Folder API for better performance
@@ -19,193 +42,210 @@ export async function showTagsWithFolderAPI(
     console.log("Displaying comprehensive metadata:\n");
   }
 
-  // Extract unique directories from the file list
+  // Get unique directories from file paths
   const directories = new Set<string>();
-  const fileSet = new Set(filesToProcess);
-
   for (const file of filesToProcess) {
     directories.add(dirname(file));
   }
 
   // Create spinner
   const spinner = ora({
-    text: "Reading metadata",
-    suffixText: `0/${filesToProcess.length} (0%)`,
+    text: "Scanning folders for metadata",
     spinner: "dots",
   }).start();
 
-  let processedCount = 0;
-  const allFiles: AudioFileMetadata[] = [];
+  try {
+    const allFiles: FileMetadata[] = [];
+    let totalProcessed = 0;
+    let totalFound = 0;
 
-  // Scan each directory using Folder API
-  for (const dir of directories) {
-    try {
+    // Scan each directory
+    for (const dir of directories) {
+      spinner.text = `Scanning ${dir}`;
+
       const result = await scanMusicDirectory(dir, {
         recursive: false, // Don't recurse since we have specific files
-        onProgress: (_processed, _total, currentFile) => {
-          // Only count files that were in our original list
-          if (fileSet.has(currentFile)) {
-            processedCount++;
-            const progress = Math.round(
-              (processedCount / filesToProcess.length) * 100,
-            );
-            spinner.suffixText =
-              `${processedCount}/${filesToProcess.length} (${progress}%)`;
-          }
+        onProgress: (processed, total, _file) => {
+          spinner.text = `Scanning ${dir} - ${processed}/${total} files`;
         },
-        concurrency: 8, // Process up to 8 files in parallel
+        concurrency: 8,
       });
 
-      // Filter to only include files we care about
-      const relevantFiles = result.files.filter((f) => fileSet.has(f.path));
-      allFiles.push(...relevantFiles);
-    } catch (error) {
-      const errorMessage = error instanceof Error
-        ? error.message
-        : String(error);
-      spinner.fail(`Error scanning directory ${dir}: ${errorMessage}`);
-      continue;
-    }
-  }
-
-  spinner.succeed(`Read metadata from ${allFiles.length} files`);
-
-  // Group files by album
-  const filesByAlbum = groupFilesByAlbum(allFiles);
-
-  // Display results
-  let firstAlbum = true;
-  for (const [albumName, files] of filesByAlbum) {
-    if (!firstAlbum) console.log("\n" + "─".repeat(80) + "\n");
-    firstAlbum = false;
-
-    console.log(`🎵 Album: ${albumName}`);
-    console.log(`📁 Files: ${files.length}`);
-
-    // Extract common album metadata
-    const firstFile = files[0];
-    const albumArtist = firstFile.tags?.artist || "Unknown Artist";
-    const albumYear = firstFile.tags?.year;
-    const albumGenre = firstFile.tags?.genre;
-
-    if (albumArtist) console.log(`👤 Artist: ${albumArtist}`);
-    if (albumYear) console.log(`📅 Year: ${albumYear}`);
-    if (albumGenre) console.log(`🎼 Genre: ${albumGenre}`);
-
-    // Check for ReplayGain album values
-    const albumGainTag =
-      firstFile.tags && "replayGainAlbumGain" in firstFile.tags
-        ? firstFile.tags.replayGainAlbumGain
-        : undefined;
-    const albumPeakTag =
-      firstFile.tags && "replayGainAlbumPeak" in firstFile.tags
-        ? firstFile.tags.replayGainAlbumPeak
-        : undefined;
-
-    if (albumGainTag !== undefined || albumPeakTag !== undefined) {
-      console.log("\n📊 Album ReplayGain:");
-      if (albumGainTag !== undefined) {
-        console.log(`  Gain: ${albumGainTag}`);
+      // Filter results to only include our requested files
+      for (const file of result.files) {
+        if (filesToProcess.includes(file.path)) {
+          const metadata: FileMetadata = {
+            path: file.path,
+            title: file.tags?.title,
+            artist: file.tags?.artist,
+            album: file.tags?.album,
+            year: file.tags?.year,
+            track: file.tags?.track,
+            genre: file.tags?.genre,
+            comment: file.tags?.comment,
+            duration: file.properties?.length,
+            bitrate: file.properties?.bitrate,
+            sampleRate: file.properties?.sampleRate,
+            channels: file.properties?.channels,
+            format: file.path.substring(file.path.lastIndexOf(".") + 1)
+              .toUpperCase(),
+            // Extended tags - need to check if they exist in the tags object
+            // Extended tags - type casting needed as these fields aren't in base interface
+            replayGainTrackGain: (file.tags as Record<string, unknown>)
+              ?.replayGainTrackGain as string | undefined,
+            replayGainTrackPeak: (file.tags as Record<string, unknown>)
+              ?.replayGainTrackPeak as string | undefined,
+            replayGainAlbumGain: (file.tags as Record<string, unknown>)
+              ?.replayGainAlbumGain as string | undefined,
+            replayGainAlbumPeak: (file.tags as Record<string, unknown>)
+              ?.replayGainAlbumPeak as string | undefined,
+            acoustIdFingerprint: (file.tags as Record<string, unknown>)
+              ?.acoustIdFingerprint as string | undefined,
+            acoustIdId: (file.tags as Record<string, unknown>)?.acoustIdId as
+              | string
+              | undefined,
+            hasCoverArt: (file as Record<string, unknown>).pictures &&
+              Array.isArray((file as Record<string, unknown>).pictures) &&
+              ((file as Record<string, unknown>).pictures as unknown[]).length >
+                0,
+            coverArtCount: (file as Record<string, unknown>).pictures &&
+                Array.isArray((file as Record<string, unknown>).pictures)
+              ? ((file as Record<string, unknown>).pictures as unknown[])
+                .length
+              : 0,
+          };
+          allFiles.push(metadata);
+          totalProcessed++;
+        }
       }
-      if (albumPeakTag !== undefined) {
-        console.log(`  Peak: ${albumPeakTag}`);
+
+      totalFound += result.totalFound;
+
+      // Report any errors
+      for (const error of result.errors) {
+        if (filesToProcess.includes(error.path)) {
+          console.error(`\n❌ Error reading ${error.path}: ${error.error}`);
+        }
       }
     }
 
-    console.log("\n📋 Tracks:");
+    spinner.succeed(`Successfully read metadata from ${totalProcessed} files`);
 
-    // Create table for tracks
-    const table = new Table()
-      .header(["#", "Title", "Duration", "AcoustID", "ReplayGain"]);
-
-    for (const file of files) {
-      const metadata = formatMetadataForDisplay(file);
-      const duration = metadata.duration
-        ? formatDuration(metadata.duration as number)
-        : "Unknown";
-
-      const acoustId = metadata.acoustIdId ? "✓" : "✗";
-
-      const replayGainInfo = [];
-      if (file.tags && "replayGainTrackGain" in file.tags) {
-        replayGainInfo.push(`G: ${file.tags.replayGainTrackGain}`);
+    // Group by album
+    const albums = new Map<string, FileMetadata[]>();
+    for (const file of allFiles) {
+      const albumKey = file.album || "Unknown Album";
+      if (!albums.has(albumKey)) {
+        albums.set(albumKey, []);
       }
-      if (file.tags && "replayGainTrackPeak" in file.tags) {
-        replayGainInfo.push(`P: ${file.tags.replayGainTrackPeak}`);
+      albums.get(albumKey)!.push(file);
+    }
+
+    // Sort files within each album by track number
+    for (const files of albums.values()) {
+      files.sort((a, b) => (a.track || 999) - (b.track || 999));
+    }
+
+    // Display each album
+    for (const [albumName, files] of albums) {
+      // Album header
+      const firstFile = files[0];
+      const albumArtist = firstFile.artist || "Unknown Artist";
+      const albumYear = firstFile.year || "";
+      const trackCount = files.length;
+
+      console.log(
+        `💿 ${albumName} - ${albumArtist}${
+          albumYear ? ` (${albumYear})` : ""
+        } - ${trackCount} track${trackCount > 1 ? "s" : ""}`,
+      );
+      console.log("▔".repeat(80));
+
+      // Display each track
+      for (const file of files) {
+        console.log(`${file.title || "Unknown Title"}`);
+        console.log(
+          `🎵 Title                 ${file.title || "Unknown Title"}`,
+        );
+        console.log(
+          `🎤 Artist                ${file.artist || "Unknown Artist"}`,
+        );
+        console.log(
+          `📅 Year/Track/Genre      ${file.year || "?"} | ${
+            file.track || "?"
+          } | ${file.genre || "Unknown"}`,
+        );
+        console.log(
+          `🎧 Format/Bitrate        ${file.format || "?"} | ${
+            file.bitrate || "?"
+          } kbps`,
+        );
+        console.log(
+          `⏱️  Duration              ${
+            file.duration ? formatDuration(file.duration) : "Unknown"
+          }`,
+        );
+        console.log(
+          `📊 Sample Rate/Channels  ${file.sampleRate || "?"} Hz | ${
+            formatChannels(file.channels)
+          }`,
+        );
+
+        // Track dynamics
+        if (
+          file.replayGainTrackGain !== undefined ||
+          file.replayGainTrackPeak !== undefined
+        ) {
+          console.log(
+            `📈 Track Dynamics        Gain: ${
+              file.replayGainTrackGain !== undefined
+                ? file.replayGainTrackGain
+                : "N/A"
+            } | Peak: ${
+              file.replayGainTrackPeak !== undefined
+                ? file.replayGainTrackPeak
+                : "N/A"
+            }`,
+          );
+        } else {
+          console.log(`📈 Track Dynamics        N/A`);
+        }
+
+        // Album dynamics
+        if (
+          file.replayGainAlbumGain !== undefined ||
+          file.replayGainAlbumPeak !== undefined
+        ) {
+          console.log(
+            `📈 Album Dynamics        Gain: ${
+              file.replayGainAlbumGain !== undefined
+                ? file.replayGainAlbumGain
+                : "N/A"
+            } | Peak: ${
+              file.replayGainAlbumPeak !== undefined
+                ? file.replayGainAlbumPeak
+                : "N/A"
+            }`,
+          );
+        } else {
+          console.log(`📈 Album Dynamics        N/A`);
+        }
+
+        // Cover art
+        console.log(
+          `🖼️  Cover Art             ${
+            file.hasCoverArt ? `Yes (${file.coverArtCount} images)` : "No"
+          }`,
+        );
+
+        // Add spacing between tracks
+        console.log();
       }
-      const replayGain = replayGainInfo.length > 0
-        ? replayGainInfo.join(", ")
-        : "✗";
-
-      table.push([
-        metadata.track?.toString() || "-",
-        (metadata.title || "Unknown Title") as string,
-        duration,
-        acoustId,
-        replayGain,
-      ]);
     }
-
-    table.render();
-
-    // Display audio properties summary
-    const bitrates = new Set<number>();
-    const sampleRates = new Set<number>();
-    const formats = new Set<string>();
-
-    for (const file of files) {
-      if (file.properties?.bitrate) bitrates.add(file.properties.bitrate);
-      if (file.properties?.sampleRate) {
-        sampleRates.add(file.properties.sampleRate);
-      }
-      // Try to get format from file extension
-      const ext = file.path.substring(file.path.lastIndexOf(".") + 1)
-        .toUpperCase();
-      formats.add(ext);
-    }
-
-    console.log("\n🎧 Audio Properties:");
-    if (bitrates.size > 0) {
-      console.log(`  Bitrate: ${Array.from(bitrates).join(", ")} kbps`);
-    }
-    if (sampleRates.size > 0) {
-      console.log(`  Sample Rate: ${Array.from(sampleRates).join(", ")} Hz`);
-    }
-    if (formats.size > 0) {
-      console.log(`  Format: ${Array.from(formats).join(", ")}`);
-    }
-
-    // Check for extended metadata
-    const hasAcoustId = files.some((f) =>
-      f.tags && ("acoustIdId" in f.tags || "acoustIdFingerprint" in f.tags)
+  } catch (error) {
+    spinner.fail(
+      `Error: ${error instanceof Error ? error.message : String(error)}`,
     );
-    const hasMusicBrainz = files.some((f) =>
-      f.tags && ("musicBrainzTrackId" in f.tags ||
-        "musicBrainzReleaseId" in f.tags ||
-        "musicBrainzArtistId" in f.tags)
-    );
-
-    if (hasAcoustId || hasMusicBrainz) {
-      console.log("\n🔍 Extended Metadata:");
-      if (hasAcoustId) console.log("  • AcoustID data present");
-      if (hasMusicBrainz) console.log("  • MusicBrainz IDs present");
-    }
+    throw error;
   }
-
-  // Summary
-  console.log("\n" + "═".repeat(80));
-  console.log(`\n📊 Summary:`);
-  console.log(`  Total files: ${allFiles.length}`);
-  console.log(`  Albums: ${filesByAlbum.size}`);
-
-  const errors = allFiles.filter((f) => f.error).length;
-  if (errors > 0) {
-    console.log(`  Errors: ${errors}`);
-  }
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }

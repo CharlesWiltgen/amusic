@@ -1,59 +1,19 @@
-import { TagLib } from "taglib-wasm";
-import { WasmCache } from "./wasm_cache.ts";
+import type { TagLib } from "jsr:@charlesw/taglib-wasm";
+import { ensureTagLib } from "./taglib_init.ts";
 import { readFileAsync } from "../utils/async-file-reader.ts";
 
-// TagLib instance - reuse for performance
-let taglibInstance: TagLib | null = null;
-
-// WASM cache instance (used for both dev and production)
-const wasmCache = new WasmCache();
-
-export async function ensureTagLib(): Promise<TagLib> {
-  if (!taglibInstance) {
-    try {
-      // Get WASM data from cache (downloads if needed)
-      const wasmData = await wasmCache.getWasmData();
-
-      // Initialize with the binary data
-      taglibInstance = await TagLib.initialize({
-        wasmBinary: wasmData,
-      });
-    } catch (error) {
-      console.error("Failed to initialize TagLib:", error);
-      throw error;
-    }
-  }
-  return taglibInstance;
-}
-
 /**
- * Helper to open a file with smart partial loading based on file size
+ * Helper to open a file for reading or writing
  * @param taglib The TagLib instance
  * @param filePath Path to the file
- * @param forWriting Whether the file will be modified (disables partial loading)
  * @returns The opened audio file
  */
-async function openFileWithSmartLoading(
+async function openFile(
   taglib: TagLib,
   filePath: string,
-  forWriting = false,
 ) {
   const fileData = await readFileAsync(filePath);
-
-  // Skip partial loading for write operations
-  if (forWriting) {
-    return await taglib.open(fileData);
-  }
-
-  // Check file size for smart partial loading
-  const fileInfo = await Deno.stat(filePath);
-  const usePartialLoading = fileInfo.size > 3 * 1024 * 1024; // 3MB threshold
-
-  return await taglib.open(fileData, {
-    partial: usePartialLoading,
-    maxHeaderSize: 2 * 1024 * 1024, // 2MB header
-    maxFooterSize: 256 * 1024, // 256KB footer
-  });
+  return await taglib.open(fileData);
 }
 
 /**
@@ -68,19 +28,19 @@ export async function getAcoustIDTags(
   let audioFile = null;
   try {
     // Use smart partial loading for read operations
-    audioFile = await openFileWithSmartLoading(taglib, filePath);
+    audioFile = await openFile(taglib, filePath);
 
     const tags: { ACOUSTID_FINGERPRINT?: string; ACOUSTID_ID?: string } = {};
 
-    // Use the built-in AcoustID methods
+    // Use direct methods to access AcoustID tags
     const fingerprint = audioFile.getAcoustIdFingerprint();
-    const id = audioFile.getAcoustIdId();
-
     if (fingerprint) {
       tags.ACOUSTID_FINGERPRINT = fingerprint;
     }
-    if (id) {
-      tags.ACOUSTID_ID = id;
+
+    const acoustId = audioFile.getAcoustIdId();
+    if (acoustId) {
+      tags.ACOUSTID_ID = acoustId;
     }
 
     return Object.keys(tags).length > 0 ? tags : null;
@@ -113,7 +73,7 @@ export async function getAudioDuration(filePath: string): Promise<number> {
   let audioFile = null;
   try {
     // Use smart partial loading for read operations
-    audioFile = await openFileWithSmartLoading(taglib, filePath);
+    audioFile = await openFile(taglib, filePath);
 
     const properties = audioFile.audioProperties();
     return properties?.length || 0;
@@ -147,10 +107,10 @@ export async function writeAcoustIDTags(
 
   let audioFile = null;
   try {
-    // Use full file loading for write operations
-    audioFile = await openFileWithSmartLoading(taglib, filePath, true);
+    // Open file for writing
+    audioFile = await openFile(taglib, filePath);
 
-    // Use the built-in AcoustID methods
+    // Use direct methods to set AcoustID tags
     audioFile.setAcoustIdFingerprint(fingerprint);
     if (acoustID) {
       audioFile.setAcoustIdId(acoustID);
@@ -189,10 +149,10 @@ export async function getReplayGainTags(
   filePath: string,
 ): Promise<
   {
-    trackGain?: number;
-    trackPeak?: number;
-    albumGain?: number;
-    albumPeak?: number;
+    trackGain?: string;
+    trackPeak?: string;
+    albumGain?: string;
+    albumPeak?: string;
   } | null
 > {
   const taglib = await ensureTagLib();
@@ -200,24 +160,35 @@ export async function getReplayGainTags(
   let audioFile = null;
   try {
     // Use smart partial loading for read operations
-    audioFile = await openFileWithSmartLoading(taglib, filePath);
+    audioFile = await openFile(taglib, filePath);
 
     const tags: {
-      trackGain?: number;
-      trackPeak?: number;
-      albumGain?: number;
-      albumPeak?: number;
+      trackGain?: string;
+      trackPeak?: string;
+      albumGain?: string;
+      albumPeak?: string;
     } = {};
 
+    // Use direct methods to access ReplayGain tags
     const trackGain = audioFile.getReplayGainTrackGain();
-    const trackPeak = audioFile.getReplayGainTrackPeak();
-    const albumGain = audioFile.getReplayGainAlbumGain();
-    const albumPeak = audioFile.getReplayGainAlbumPeak();
+    if (trackGain !== null && trackGain !== undefined) {
+      tags.trackGain = trackGain;
+    }
 
-    if (trackGain !== undefined) tags.trackGain = parseFloat(trackGain);
-    if (trackPeak !== undefined) tags.trackPeak = parseFloat(trackPeak);
-    if (albumGain !== undefined) tags.albumGain = parseFloat(albumGain);
-    if (albumPeak !== undefined) tags.albumPeak = parseFloat(albumPeak);
+    const trackPeak = audioFile.getReplayGainTrackPeak();
+    if (trackPeak !== null && trackPeak !== undefined) {
+      tags.trackPeak = trackPeak;
+    }
+
+    const albumGain = audioFile.getReplayGainAlbumGain();
+    if (albumGain !== null && albumGain !== undefined) {
+      tags.albumGain = albumGain;
+    }
+
+    const albumPeak = audioFile.getReplayGainAlbumPeak();
+    if (albumPeak !== null && albumPeak !== undefined) {
+      tags.albumPeak = albumPeak;
+    }
 
     return Object.keys(tags).length > 0 ? tags : null;
   } catch (error) {
@@ -242,31 +213,31 @@ export async function getReplayGainTags(
 export async function writeReplayGainTags(
   filePath: string,
   tags: {
-    trackGain?: number;
-    trackPeak?: number;
-    albumGain?: number;
-    albumPeak?: number;
+    trackGain?: string;
+    trackPeak?: string;
+    albumGain?: string;
+    albumPeak?: string;
   },
 ): Promise<boolean> {
   const taglib = await ensureTagLib();
 
   let audioFile = null;
   try {
-    const fileData = await readFileAsync(filePath);
-    audioFile = await taglib.open(fileData);
+    // Open file for writing
+    audioFile = await openFile(taglib, filePath);
 
-    // Set ReplayGain values
+    // Use direct methods to set ReplayGain tags
     if (tags.trackGain !== undefined) {
-      audioFile.setReplayGainTrackGain(tags.trackGain.toString());
+      audioFile.setReplayGainTrackGain(tags.trackGain);
     }
     if (tags.trackPeak !== undefined) {
-      audioFile.setReplayGainTrackPeak(tags.trackPeak.toString());
+      audioFile.setReplayGainTrackPeak(tags.trackPeak);
     }
     if (tags.albumGain !== undefined) {
-      audioFile.setReplayGainAlbumGain(tags.albumGain.toString());
+      audioFile.setReplayGainAlbumGain(tags.albumGain);
     }
     if (tags.albumPeak !== undefined) {
-      audioFile.setReplayGainAlbumPeak(tags.albumPeak.toString());
+      audioFile.setReplayGainAlbumPeak(tags.albumPeak);
     }
 
     // Save the file
@@ -341,7 +312,7 @@ export async function getComprehensiveMetadata(
   let audioFile = null;
   try {
     // Use smart partial loading for read operations
-    audioFile = await openFileWithSmartLoading(taglib, filePath);
+    audioFile = await openFile(taglib, filePath);
 
     const metadata: Record<string, unknown> = {};
 
@@ -362,45 +333,52 @@ export async function getComprehensiveMetadata(
     if (props?.sampleRate !== undefined) metadata.sampleRate = props.sampleRate;
     if (props?.channels !== undefined) metadata.channels = props.channels;
 
-    // Format
-    const format = audioFile.getFormat();
+    // Format - derive from file extension
+    const format = filePath.substring(filePath.lastIndexOf(".") + 1)
+      .toUpperCase();
     if (format) metadata.format = format;
 
-    // Extended tags
-    const acoustIdFingerprint = audioFile.getAcoustIdFingerprint();
-    if (acoustIdFingerprint) metadata.acoustIdFingerprint = acoustIdFingerprint;
+    // Extended tags - use direct methods
+    // AcoustID
+    const fingerprint = audioFile.getAcoustIdFingerprint();
+    if (fingerprint) {
+      metadata.acoustIdFingerprint = fingerprint;
+    }
+    const acoustId = audioFile.getAcoustIdId();
+    if (acoustId) {
+      metadata.acoustIdId = acoustId;
+    }
 
-    const acoustIdId = audioFile.getAcoustIdId();
-    if (acoustIdId) metadata.acoustIdId = acoustIdId;
-
+    // MusicBrainz
     const mbTrackId = audioFile.getMusicBrainzTrackId();
-    if (mbTrackId) metadata.musicBrainzTrackId = mbTrackId;
-
+    if (mbTrackId) {
+      metadata.musicBrainzTrackId = mbTrackId;
+    }
     const mbReleaseId = audioFile.getMusicBrainzReleaseId();
-    if (mbReleaseId) metadata.musicBrainzReleaseId = mbReleaseId;
-
+    if (mbReleaseId) {
+      metadata.musicBrainzReleaseId = mbReleaseId;
+    }
     const mbArtistId = audioFile.getMusicBrainzArtistId();
-    if (mbArtistId) metadata.musicBrainzArtistId = mbArtistId;
+    if (mbArtistId) {
+      metadata.musicBrainzArtistId = mbArtistId;
+    }
 
     // ReplayGain
     const trackGain = audioFile.getReplayGainTrackGain();
-    if (trackGain !== undefined) {
-      metadata.replayGainTrackGain = parseFloat(trackGain);
+    if (trackGain !== null && trackGain !== undefined) {
+      metadata.replayGainTrackGain = trackGain;
     }
-
     const trackPeak = audioFile.getReplayGainTrackPeak();
-    if (trackPeak !== undefined) {
-      metadata.replayGainTrackPeak = parseFloat(trackPeak);
+    if (trackPeak !== null && trackPeak !== undefined) {
+      metadata.replayGainTrackPeak = trackPeak;
     }
-
     const albumGain = audioFile.getReplayGainAlbumGain();
-    if (albumGain !== undefined) {
-      metadata.replayGainAlbumGain = parseFloat(albumGain);
+    if (albumGain !== null && albumGain !== undefined) {
+      metadata.replayGainAlbumGain = albumGain;
     }
-
     const albumPeak = audioFile.getReplayGainAlbumPeak();
-    if (albumPeak !== undefined) {
-      metadata.replayGainAlbumPeak = parseFloat(albumPeak);
+    if (albumPeak !== null && albumPeak !== undefined) {
+      metadata.replayGainAlbumPeak = albumPeak;
     }
 
     // Cover art

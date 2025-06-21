@@ -15,7 +15,8 @@ export async function defaultCommand(
   const filesToProcess = await collectAudioFiles(files);
 
   if (options.showTags) {
-    // Use the new Folder API for better performance
+    // Use the Folder API for better performance
+    // Note: There's a known issue with scanFolder hanging on some directories in taglib-wasm 0.4.3
     await showTagsWithFolderAPI(filesToProcess, options.quiet);
     return;
   }

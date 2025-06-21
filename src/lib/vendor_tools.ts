@@ -1,6 +1,15 @@
 import { dirname, fromFileUrl, join } from "jsr:@std/path";
 
 /**
+ * Detects if the code is running in a compiled Deno binary.
+ */
+function isDenoCompiled(): boolean {
+  return typeof Deno !== "undefined" &&
+    typeof Deno.mainModule === "string" &&
+    Deno.mainModule.includes("/deno-compile-");
+}
+
+/**
  * Determine the platform-specific vendor binary path for the given tool.
  * Supports 'fpcalc' and 'rsgain'.
  */
@@ -31,11 +40,25 @@ export function getVendorBinaryPath(
   }
 
   const platformDir = `${vendorOs}-${vendorArch}`;
-  const baseDir = dirname(fromFileUrl(import.meta.url));
-  const toolDir = join(baseDir, "../vendor", platformDir, tool);
-
   const binaryName = tool + (os === "windows" ? ".exe" : "");
-  const vendorPath = join(toolDir, binaryName);
+
+  let vendorPath: string;
+
+  if (isDenoCompiled()) {
+    // In compiled mode, binaries are included in the executable
+    // The extraction preserves the src/vendor structure from --include=src/vendor
+    const baseUrl = new URL(
+      `../../src/vendor/${platformDir}/${tool}/${binaryName}`,
+      import.meta.url,
+    );
+    vendorPath = fromFileUrl(baseUrl);
+  } else {
+    // In development mode, use the relative path from source
+    const baseDir = dirname(fromFileUrl(import.meta.url));
+    const toolDir = join(baseDir, "../vendor", platformDir, tool);
+    vendorPath = join(toolDir, binaryName);
+  }
+
   // Ensure the vendor binary exists; fail if missing
   try {
     const info = Deno.statSync(vendorPath);
@@ -47,8 +70,6 @@ export function getVendorBinaryPath(
   }
   throw new Error(
     `Vendored binary for "${tool}" not found at "${vendorPath}". ` +
-      `Please ensure the vendor/${platformDir}/${tool}${
-        os === "windows" ? ".exe" : ""
-      } binary is present.`,
+      `Please ensure the vendor/${platformDir}/${tool}/${binaryName} binary is present.`,
   );
 }

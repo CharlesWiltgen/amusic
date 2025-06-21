@@ -124,7 +124,11 @@ export async function duplicatesCommand(
     const spaceSavingsMB = Math.round(spaceSavings / 1024 / 1024);
     console.log(`  Potential space savings: ~${spaceSavingsMB} MB`);
   } catch (error) {
-    console.error(`❌ Error finding duplicates: ${error.message}`);
+    console.error(
+      `❌ Error finding duplicates: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     Deno.exit(1);
   }
 }

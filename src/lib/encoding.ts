@@ -1,7 +1,7 @@
 // encoding.ts
 import { extname } from "jsr:@std/path";
 import { VERSION } from "../version.ts";
-import { ensureTagLib } from "./tagging.ts";
+import { ensureTagLib } from "./taglib_init.ts";
 
 const LOSSLESS_FORMATS = ["wav", "flac"]; // m4a removed - will check codec
 const LOSSY_FORMATS = ["mp3", "ogg"];
@@ -213,11 +213,12 @@ async function copyMetadata(
       throw new Error("Failed to open source file");
     }
 
-    // Get ALL metadata using properties() - this preserves everything
-    const allMetadata = sourceFile.properties();
+    // Get ALL metadata using propertyMap - this preserves everything
+    const sourcePropMap = sourceFile.propertyMap();
+    const allMetadata = sourcePropMap.properties();
 
     // Get cover art separately (not included in properties)
-    const pictures = sourceFile.getPictures();
+    const pictures = sourceFile.pictures();
 
     // Debug: log basic metadata
     console.log(
@@ -233,11 +234,14 @@ async function copyMetadata(
     }
 
     // Copy ALL metadata properties at once
-    destFile.setProperties(allMetadata);
+    const destPropMap = destFile.propertyMap();
+    for (const [key, values] of Object.entries(allMetadata)) {
+      destPropMap.set(key, values);
+    }
 
     // Add encoder information
-    destFile.setProperty("ENCODER", `amusic v${VERSION} (taglib-wasm)`);
-    destFile.setProperty("ENCODER_SETTINGS", "afconvert -d aac -s 3 -q 127");
+    destPropMap.set("ENCODER", [`amusic v${VERSION} (taglib-wasm)`]);
+    destPropMap.set("ENCODER_SETTINGS", ["afconvert -d aac -s 3 -q 127"]);
 
     // Copy cover art
     if (pictures && pictures.length > 0) {
