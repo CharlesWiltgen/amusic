@@ -182,33 +182,36 @@ files successfully processed, skipped, and failed.
    deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "./path/to/your/music file.mp3"
    ```
 
-1a. **Process an album directory:** Calculate and embed ReplayGain metadata and
-generate AcoustID fingerprints for all tracks in a single folder:
+2. **Process an album directory:** Calculate and embed ReplayGain metadata and
+   generate AcoustID fingerprints for all tracks in a single folder:
 
-```bash
-deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "/path/to/album_folder"
-```
+   ```bash
+   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "/path/to/album_folder"
+   ```
 
-2. **Process multiple files, one of them with forced overwrite:**
+3. **Process multiple files, one of them with forced overwrite:**
 
    ```bash
    deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --force "./path/to/your/music file.flac" "./another/audio.ogg"
    ```
 
-3. **Process a file in quiet mode:**
+4. **Process a file in quiet mode:**
+
    ```bash
    deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --quiet "./path/to/quiet_process.mp3"
    ```
 
-4. **Perform a lookup using the environment variable (preferred):**
+5. **Perform a lookup using the environment variable (preferred):**
+
    ```bash
    export ACOUSTID_API_KEY=your_api_key_here
    deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts \
      ./path/to/your/music/file.mp3
    ```
 
-5. **Easy Mode: Process a music library organized by album folders. Calculates
+6. **Easy Mode: Process a music library organized by album folders. Calculates
    ReplayGain for each album and AcousticID for each track:**
+
    ```bash
    deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts easy /path/to/music/library --api-key $ACOUSTID_API_KEY
    ```
