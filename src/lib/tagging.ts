@@ -281,9 +281,8 @@ export async function getComprehensiveMetadataWithPropertyMap(
   let audioFile = null;
   try {
     audioFile = await openFile(taglib, filePath);
-    // @ts-ignore: propertyMap exists at runtime
-    const propMap = audioFile.propertyMap();
-    const properties = propMap.properties();
+    // @ts-ignore: properties exists at runtime
+    const properties = audioFile.properties();
 
     // Return all properties as-is for maximum flexibility
     return properties;

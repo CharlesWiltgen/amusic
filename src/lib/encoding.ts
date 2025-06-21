@@ -207,7 +207,7 @@ async function copyMetadata(
   try {
     // Read source file
     const sourceData = await Deno.readFile(sourcePath);
-    sourceFile = await taglib.open(sourceData);
+    sourceFile = await taglib.open(sourceData, sourcePath);
 
     if (!sourceFile) {
       throw new Error("Failed to open source file");
@@ -225,10 +225,9 @@ async function copyMetadata(
       comment: sourceTag.comment,
     };
 
-    // Get ALL metadata using PropertyMap for comprehensive copying
-    // @ts-ignore: propertyMap exists at runtime
-    const sourcePropMap = sourceFile.propertyMap();
-    const allProperties = sourcePropMap.properties();
+    // Get ALL metadata using properties() method
+    // @ts-ignore: properties exists at runtime
+    const allProperties = sourceFile.properties() || {};
 
     // Count properties for logging
     const propertyCount = Object.keys(allProperties).length;
@@ -236,7 +235,7 @@ async function copyMetadata(
       v !== undefined && v !== null
     ).length;
     console.log(
-      `Copying metadata: ${basicCount} basic properties, ${propertyCount} total properties found`,
+      `   Copying metadata: ${basicCount} basic properties, ${propertyCount} total properties found`,
     );
 
     // Get cover art separately (still needed as PropertyMap doesn't handle pictures)
@@ -244,7 +243,7 @@ async function copyMetadata(
 
     // Now open destination file
     const destData = await Deno.readFile(destPath);
-    destFile = await taglib.open(destData);
+    destFile = await taglib.open(destData, destPath);
 
     if (!destFile) {
       throw new Error("Failed to open destination file");
@@ -260,10 +259,7 @@ async function copyMetadata(
     if (basicMetadata.genre) destTag.setGenre(basicMetadata.genre);
     if (basicMetadata.comment) destTag.setComment(basicMetadata.comment);
 
-    // Copy ALL properties using PropertyMap
-    // @ts-ignore: propertyMap exists at runtime
-    const destPropMap = destFile.propertyMap();
-
+    // Copy ALL properties using setProperties()
     // List of properties to skip (format-specific or would cause issues)
     const skipProperties = [
       // These are handled by basic tag methods above
@@ -286,14 +282,21 @@ async function copyMetadata(
       "CHANNELS",
     ];
 
-    // Copy all properties except those in skip list
+    // Filter out properties that should be skipped
+    const propertiesToCopy: Record<string, string[]> = {};
     for (const [key, values] of Object.entries(allProperties)) {
       if (
         !skipProperties.includes(key.toUpperCase()) && values &&
-        values.length > 0
+        Array.isArray(values) && values.length > 0
       ) {
-        destPropMap.set(key, values);
+        propertiesToCopy[key] = values;
       }
+    }
+
+    // Copy all filtered properties at once
+    if (Object.keys(propertiesToCopy).length > 0) {
+      // @ts-ignore: setProperties exists at runtime
+      destFile.setProperties(propertiesToCopy);
     }
 
     // Add encoder information

@@ -1,13 +1,13 @@
 {
   "name": "amusic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "exports": {},
   "tasks": {
     "start": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net src/amusic.ts",
     "build": "deno run --allow-read --allow-write scripts/generate_version.ts && deno compile --no-check --allow-read --allow-run --allow-write --allow-env --allow-net --include=src/vendor -o dist/amusic src/amusic.ts && deno run --allow-run --allow-read --allow-write scripts/sign_macos.ts",
     "check": "deno fmt --check && deno lint",
     "fix": "deno fmt && deno lint",
-    "test": "deno test --allow-read --allow-run --allow-write --allow-env",
+    "test": "deno test --allow-read --allow-run --allow-write --allow-env --allow-net",
     "pre-commit": "deno task check",
     "bump": "deno run --allow-read --allow-write scripts/bump_version.ts",
     "version:patch": "deno run --allow-read --allow-write scripts/sync-version.ts patch",
