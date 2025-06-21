@@ -1,7 +1,53 @@
-import { dirname } from "jsr:@std/path";
-import ora from "npm:ora@8.1.1";
-import { scanMusicDirectory } from "../lib/folder_operations.ts";
+import { readMetadataBatch } from "jsr:@charlesw/taglib-wasm";
 import { formatChannels, formatDuration } from "../utils/format.ts";
+
+/**
+ * Format container format for display, adding descriptive names where appropriate
+ */
+function formatContainerFormat(format: string): string {
+  switch (format) {
+    case "MP4":
+      return "MP4 (ISOBMFF)";
+    case "OGG":
+      return "OGG";
+    case "MP3":
+      return "MP3";
+    case "FLAC":
+      return "FLAC";
+    case "WAV":
+      return "WAV (RIFF)";
+    case "AIFF":
+      return "AIFF";
+    default:
+      return format;
+  }
+}
+
+/**
+ * Format codec for display, adding descriptive names where appropriate
+ */
+function formatCodec(codec: string): string {
+  switch (codec) {
+    case "AAC":
+      return "AAC-LC";
+    case "ALAC":
+      return "Apple Lossless";
+    case "MP3":
+      return "MP3";
+    case "FLAC":
+      return "FLAC";
+    case "Vorbis":
+      return "Vorbis";
+    case "Opus":
+      return "Opus";
+    case "PCM":
+      return "PCM";
+    case "IEEE Float":
+      return "IEEE Float";
+    default:
+      return codec;
+  }
+}
 
 interface FileMetadata {
   path: string;
@@ -32,218 +78,213 @@ interface FileMetadata {
 }
 
 /**
- * Display tags using the new Folder API for better performance
+ * Display tags using the new batch API for maximum performance
  */
 export async function showTagsWithFolderAPI(
   filesToProcess: string[],
   quiet: boolean,
 ): Promise<void> {
+  // Hide cursor
   if (!quiet) {
-    console.log("Displaying comprehensive metadata:\n");
+    Deno.stdout.writeSync(new TextEncoder().encode("\x1b[?25l"));
+    Deno.stdout.writeSync(
+      new TextEncoder().encode("→ Reading metadata: 0 files processed"),
+    );
   }
 
-  // Get unique directories from file paths
-  const directories = new Set<string>();
-  for (const file of filesToProcess) {
-    directories.add(dirname(file));
-  }
-
-  // Create spinner
-  const spinner = ora({
-    text: "Scanning folders for metadata",
-    spinner: "dots",
-  }).start();
+  let lastCount = 0;
 
   try {
-    const allFiles: FileMetadata[] = [];
-    let totalProcessed = 0;
-    let totalFound = 0;
-
-    // Scan each directory
-    for (const dir of directories) {
-      spinner.text = `Scanning ${dir}`;
-
-      const result = await scanMusicDirectory(dir, {
-        recursive: false, // Don't recurse since we have specific files
-        onProgress: (processed, total, _file) => {
-          spinner.text = `Scanning ${dir} - ${processed}/${total} files`;
-        },
-        concurrency: 8,
-      });
-
-      // Filter results to only include our requested files
-      for (const file of result.files) {
-        if (filesToProcess.includes(file.path)) {
-          const metadata: FileMetadata = {
-            path: file.path,
-            title: file.tags?.title,
-            artist: file.tags?.artist,
-            album: file.tags?.album,
-            year: file.tags?.year,
-            track: file.tags?.track,
-            genre: file.tags?.genre,
-            comment: file.tags?.comment,
-            duration: file.properties?.length,
-            bitrate: file.properties?.bitrate,
-            sampleRate: file.properties?.sampleRate,
-            channels: file.properties?.channels,
-            format: file.path.substring(file.path.lastIndexOf(".") + 1)
-              .toUpperCase(),
-            // Extended tags - need to check if they exist in the tags object
-            // Extended tags - type casting needed as these fields aren't in base interface
-            replayGainTrackGain: (file.tags as Record<string, unknown>)
-              ?.replayGainTrackGain as string | undefined,
-            replayGainTrackPeak: (file.tags as Record<string, unknown>)
-              ?.replayGainTrackPeak as string | undefined,
-            replayGainAlbumGain: (file.tags as Record<string, unknown>)
-              ?.replayGainAlbumGain as string | undefined,
-            replayGainAlbumPeak: (file.tags as Record<string, unknown>)
-              ?.replayGainAlbumPeak as string | undefined,
-            acoustIdFingerprint: (file.tags as Record<string, unknown>)
-              ?.acoustIdFingerprint as string | undefined,
-            acoustIdId: (file.tags as Record<string, unknown>)?.acoustIdId as
-              | string
-              | undefined,
-            hasCoverArt: (file as Record<string, unknown>).pictures &&
-              Array.isArray((file as Record<string, unknown>).pictures) &&
-              ((file as Record<string, unknown>).pictures as unknown[]).length >
-                0,
-            coverArtCount: (file as Record<string, unknown>).pictures &&
-                Array.isArray((file as Record<string, unknown>).pictures)
-              ? ((file as Record<string, unknown>).pictures as unknown[])
-                .length
-              : 0,
-          };
-          allFiles.push(metadata);
-          totalProcessed++;
+    // Use the enhanced batch API directly
+    const batchResult = await readMetadataBatch(filesToProcess, {
+      concurrency: 8,
+      continueOnError: true,
+      onProgress: (processed, total, _currentFile) => {
+        if (!quiet && processed !== lastCount) {
+          // Move cursor to beginning of line and clear it
+          Deno.stdout.writeSync(
+            new TextEncoder().encode(
+              `\x1b[2K\r→ Reading metadata: ${processed}/${total} files processed`,
+            ),
+          );
+          lastCount = processed;
         }
+      },
+    });
+
+    if (!quiet) {
+      // Update with final count and checkmark
+      Deno.stdout.writeSync(
+        new TextEncoder().encode(
+          `\x1b[2K\r✅ Reading metadata: ${batchResult.results.length} files processed\n\n`,
+        ),
+      );
+      // Show cursor
+      Deno.stdout.writeSync(new TextEncoder().encode("\x1b[?25h"));
+    }
+
+    // Process and display results immediately
+    let lastAlbum = "";
+    let albumTrackCount = 0;
+
+    for (let i = 0; i < batchResult.results.length; i++) {
+      const result = batchResult.results[i];
+
+      if ("error" in result && result.error) {
+        console.error(`Error reading ${result.file}: ${result.error}`);
+        continue;
       }
 
-      totalFound += result.totalFound;
+      const { data } = result;
+      const metadata: FileMetadata = {
+        path: result.file,
+        title: data.tags?.title,
+        artist: data.tags?.artist,
+        album: data.tags?.album,
+        year: data.tags?.year,
+        track: data.tags?.track,
+        genre: data.tags?.genre,
+        comment: data.tags?.comment,
+        duration: data.properties?.length,
+        bitrate: data.properties?.bitrate,
+        sampleRate: data.properties?.sampleRate,
+        channels: data.properties?.channels,
+        format: result.file.substring(result.file.lastIndexOf(".") + 1)
+          .toUpperCase(),
+        // Extended tags from dynamics
+        replayGainTrackGain: data.dynamics?.replayGainTrackGain,
+        replayGainTrackPeak: data.dynamics?.replayGainTrackPeak,
+        replayGainAlbumGain: data.dynamics?.replayGainAlbumGain,
+        replayGainAlbumPeak: data.dynamics?.replayGainAlbumPeak,
+        // @ts-ignore: AcoustID fields may exist
+        acoustIdFingerprint: data.tags?.acoustIdFingerprint,
+        // @ts-ignore: AcoustID fields may exist
+        acoustIdId: data.tags?.acoustIdId,
+        // Cover art is now available in batch API!
+        hasCoverArt: data.hasCoverArt || false,
+        coverArtCount: data.hasCoverArt ? 1 : 0, // API doesn't provide count
+      };
 
-      // Report any errors
-      for (const error of result.errors) {
-        if (filesToProcess.includes(error.path)) {
-          console.error(`\n❌ Error reading ${error.path}: ${error.error}`);
+      const currentAlbum = metadata.album || "Unknown Album";
+
+      // Display album header if this is a new album
+      if (currentAlbum !== lastAlbum) {
+        if (lastAlbum !== "") {
+          console.log(); // Add spacing between albums
         }
+
+        // Count tracks in this album
+        albumTrackCount = 1;
+        for (let j = i + 1; j < batchResult.results.length; j++) {
+          const nextResult = batchResult.results[j];
+          if (
+            !("error" in nextResult) &&
+            nextResult.data.tags?.album === currentAlbum
+          ) {
+            albumTrackCount++;
+          } else {
+            break;
+          }
+        }
+
+        console.log(
+          `💿 ${currentAlbum} - ${metadata.artist || "Unknown Artist"}${
+            metadata.year ? ` (${metadata.year})` : ""
+          } - ${albumTrackCount} track${albumTrackCount > 1 ? "s" : ""}`,
+        );
+        console.log("▔".repeat(80));
+        lastAlbum = currentAlbum;
       }
-    }
 
-    spinner.succeed(`Successfully read metadata from ${totalProcessed} files`);
-
-    // Group by album
-    const albums = new Map<string, FileMetadata[]>();
-    for (const file of allFiles) {
-      const albumKey = file.album || "Unknown Album";
-      if (!albums.has(albumKey)) {
-        albums.set(albumKey, []);
-      }
-      albums.get(albumKey)!.push(file);
-    }
-
-    // Sort files within each album by track number
-    for (const files of albums.values()) {
-      files.sort((a, b) => (a.track || 999) - (b.track || 999));
-    }
-
-    // Display each album
-    for (const [albumName, files] of albums) {
-      // Album header
-      const firstFile = files[0];
-      const albumArtist = firstFile.artist || "Unknown Artist";
-      const albumYear = firstFile.year || "";
-      const trackCount = files.length;
+      // Display track info
+      console.log(`${metadata.title || "Unknown Title"}`);
+      console.log(
+        `🎵 Title                 ${metadata.title || "Unknown Title"}`,
+      );
+      console.log(
+        `🎤 Artist                ${metadata.artist || "Unknown Artist"}`,
+      );
+      console.log(
+        `📅 Year/Track/Genre      ${metadata.year || "?"} | ${
+          metadata.track || "?"
+        } | ${metadata.genre || "Unknown"}`,
+      );
+      // Display format, codec, and bitrate
+      const containerFormat = data.properties?.containerFormat ||
+        metadata.format || "?";
+      const formattedContainer = formatContainerFormat(containerFormat);
+      const codec = data.properties?.codec || "?";
+      const formattedCodec = formatCodec(codec);
+      const bitrate = metadata.bitrate || "?";
 
       console.log(
-        `💿 ${albumName} - ${albumArtist}${
-          albumYear ? ` (${albumYear})` : ""
-        } - ${trackCount} track${trackCount > 1 ? "s" : ""}`,
+        `🎧 Format/Codec/Bitrate  ${formattedContainer} | ${formattedCodec} | ${bitrate} kbps`,
       );
-      console.log("▔".repeat(80));
+      console.log(
+        `⏱️ Duration              ${
+          metadata.duration ? formatDuration(metadata.duration) : "Unknown"
+        }`,
+      );
+      console.log(
+        `📊 Sample Rate/Channels  ${metadata.sampleRate || "?"} Hz | ${
+          formatChannels(metadata.channels)
+        }`,
+      );
 
-      // Display each track
-      for (const file of files) {
-        console.log(`${file.title || "Unknown Title"}`);
+      // Track dynamics
+      if (
+        metadata.replayGainTrackGain !== undefined ||
+        metadata.replayGainTrackPeak !== undefined
+      ) {
         console.log(
-          `🎵 Title                 ${file.title || "Unknown Title"}`,
-        );
-        console.log(
-          `🎤 Artist                ${file.artist || "Unknown Artist"}`,
-        );
-        console.log(
-          `📅 Year/Track/Genre      ${file.year || "?"} | ${
-            file.track || "?"
-          } | ${file.genre || "Unknown"}`,
-        );
-        console.log(
-          `🎧 Format/Bitrate        ${file.format || "?"} | ${
-            file.bitrate || "?"
-          } kbps`,
-        );
-        console.log(
-          `⏱️  Duration              ${
-            file.duration ? formatDuration(file.duration) : "Unknown"
+          `📈 Track Dynamics        Gain: ${
+            metadata.replayGainTrackGain !== undefined
+              ? metadata.replayGainTrackGain
+              : "n/a"
+          } | Peak: ${
+            metadata.replayGainTrackPeak !== undefined
+              ? metadata.replayGainTrackPeak
+              : "n/a"
           }`,
         );
-        console.log(
-          `📊 Sample Rate/Channels  ${file.sampleRate || "?"} Hz | ${
-            formatChannels(file.channels)
-          }`,
-        );
-
-        // Track dynamics
-        if (
-          file.replayGainTrackGain !== undefined ||
-          file.replayGainTrackPeak !== undefined
-        ) {
-          console.log(
-            `📈 Track Dynamics        Gain: ${
-              file.replayGainTrackGain !== undefined
-                ? file.replayGainTrackGain
-                : "N/A"
-            } | Peak: ${
-              file.replayGainTrackPeak !== undefined
-                ? file.replayGainTrackPeak
-                : "N/A"
-            }`,
-          );
-        } else {
-          console.log(`📈 Track Dynamics        N/A`);
-        }
-
-        // Album dynamics
-        if (
-          file.replayGainAlbumGain !== undefined ||
-          file.replayGainAlbumPeak !== undefined
-        ) {
-          console.log(
-            `📈 Album Dynamics        Gain: ${
-              file.replayGainAlbumGain !== undefined
-                ? file.replayGainAlbumGain
-                : "N/A"
-            } | Peak: ${
-              file.replayGainAlbumPeak !== undefined
-                ? file.replayGainAlbumPeak
-                : "N/A"
-            }`,
-          );
-        } else {
-          console.log(`📈 Album Dynamics        N/A`);
-        }
-
-        // Cover art
-        console.log(
-          `🖼️  Cover Art             ${
-            file.hasCoverArt ? `Yes (${file.coverArtCount} images)` : "No"
-          }`,
-        );
-
-        // Add spacing between tracks
-        console.log();
+      } else {
+        console.log(`📈 Track Dynamics        n/a`);
       }
+
+      // Album dynamics
+      if (
+        metadata.replayGainAlbumGain !== undefined ||
+        metadata.replayGainAlbumPeak !== undefined
+      ) {
+        console.log(
+          `📈 Album Dynamics        Gain: ${
+            metadata.replayGainAlbumGain !== undefined
+              ? metadata.replayGainAlbumGain
+              : "n/a"
+          } | Peak: ${
+            metadata.replayGainAlbumPeak !== undefined
+              ? metadata.replayGainAlbumPeak
+              : "n/a"
+          }`,
+        );
+      } else {
+        console.log(`📈 Album Dynamics        n/a`);
+      }
+
+      // Cover art
+      console.log(
+        `🖼️ Cover Art             ${metadata.hasCoverArt ? "Yes" : "No"}`,
+      );
+
+      // Add spacing between tracks
+      console.log();
     }
   } catch (error) {
-    spinner.fail(
+    if (!quiet) {
+      // Show cursor on error
+      Deno.stdout.writeSync(new TextEncoder().encode("\x1b[?25h"));
+    }
+    console.error(
       `Error: ${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;

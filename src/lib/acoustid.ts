@@ -296,3 +296,140 @@ export async function processAcoustIDTagging(
   if (!quiet) console.log("  ERROR: Failed to write AcoustID tags.");
   return "failed";
 }
+
+/**
+ * Batch process multiple files for AcoustID tagging.
+ * Much more efficient than processing files individually.
+ */
+export async function batchProcessAcoustIDTagging(
+  filePaths: string[],
+  apiKey: string,
+  options: {
+    force?: boolean;
+    quiet?: boolean;
+    dryRun?: boolean;
+    concurrency?: number;
+    onProgress?: (
+      processed: number,
+      total: number,
+      currentFile: string,
+    ) => void;
+  } = {},
+): Promise<Map<string, ProcessResultStatus>> {
+  const {
+    force = false,
+    quiet = true,
+    dryRun = false,
+    concurrency = 4,
+    onProgress,
+  } = options;
+  const results = new Map<string, ProcessResultStatus>();
+
+  // Step 1: Batch check for existing tags
+  if (!quiet) console.log("Checking for existing AcoustID tags...");
+  const existingTags = await batchCheckAcoustIDTags(filePaths, concurrency);
+
+  // Filter files that need processing
+  const filesToProcess = filePaths.filter((file) => {
+    const hasTag = existingTags.get(file) || false;
+    if (hasTag && !force) {
+      results.set(file, "skipped");
+      return false;
+    }
+    return true;
+  });
+
+  if (!quiet) {
+    console.log(
+      `Files to process: ${filesToProcess.length} of ${filePaths.length}`,
+    );
+  }
+
+  // Step 2: Get durations for all files in batch
+  const durations = await batchGetAudioProperties(filesToProcess, concurrency);
+
+  // Step 3: Process fingerprinting in parallel batches
+  const batchSize = concurrency;
+  for (let i = 0; i < filesToProcess.length; i += batchSize) {
+    const batch = filesToProcess.slice(i, i + batchSize);
+
+    // Process batch in parallel
+    const batchPromises = batch.map(async (filePath) => {
+      try {
+        if (onProgress) {
+          onProgress(
+            i + batch.indexOf(filePath) + 1,
+            filesToProcess.length,
+            filePath,
+          );
+        }
+
+        // Generate fingerprint
+        const fingerprint = await generateFingerprint(filePath);
+        if (!fingerprint) {
+          results.set(filePath, "failed");
+          return;
+        }
+
+        // Get duration from our batch lookup
+        const props = durations.get(filePath);
+        const duration = props?.duration || 0;
+
+        // Lookup in AcoustID API
+        let acoustIDToWrite = "";
+        let resultStatus: ProcessResultStatus = "processed";
+
+        if (apiKey) {
+          const lookupResult = await lookupFingerprint(
+            fingerprint,
+            duration,
+            apiKey,
+          );
+          if (!lookupResult) {
+            resultStatus = "lookup_failed";
+          } else if (lookupResult.status === "error") {
+            resultStatus = "lookup_failed";
+          } else if (
+            !lookupResult.results || lookupResult.results.length === 0
+          ) {
+            resultStatus = "no_results";
+          } else if (lookupResult.results[0]) {
+            acoustIDToWrite = lookupResult.results[0].id;
+          }
+        }
+
+        // Write tags
+        if (!dryRun) {
+          const success = await writeAcoustIDTags(
+            filePath,
+            fingerprint,
+            acoustIDToWrite,
+          );
+          if (!success) {
+            results.set(filePath, "failed");
+            return;
+          }
+        }
+
+        results.set(filePath, resultStatus);
+      } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : String(error);
+        if (!quiet) {
+          console.error(`Error processing ${filePath}: ${errorMessage}`);
+        }
+        results.set(filePath, "failed");
+      }
+    });
+
+    await Promise.all(batchPromises);
+  }
+
+  return results;
+}
+
+/**
+ * Helper to import batch functions from tagging module
+ */
+import { batchCheckAcoustIDTags, batchGetAudioProperties } from "./tagging.ts";

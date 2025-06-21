@@ -1,4 +1,9 @@
 import type { TagLib } from "jsr:@charlesw/taglib-wasm";
+import {
+  readMetadataBatch,
+  readProperties,
+  readTags,
+} from "jsr:@charlesw/taglib-wasm/simple";
 import { ensureTagLib } from "./taglib_init.ts";
 import { readFileAsync } from "../utils/async-file-reader.ts";
 
@@ -60,22 +65,25 @@ export async function getAcoustIDTags(
  * Returns true if tags are found, false otherwise.
  */
 export async function hasAcoustIDTags(filePath: string): Promise<boolean> {
-  const tags = await getAcoustIDTags(filePath);
-  return tags !== null && (!!tags.ACOUSTID_FINGERPRINT || !!tags.ACOUSTID_ID);
+  try {
+    // Use Simple API for efficient tag checking
+    const _tags = await readTags(filePath);
+    // Check if tags have acoustID properties (may need to check via Full API if not exposed)
+    const fullTags = await getAcoustIDTags(filePath);
+    return fullTags !== null &&
+      (!!fullTags.ACOUSTID_FINGERPRINT || !!fullTags.ACOUSTID_ID);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Gets the duration of an audio file in seconds using Taglib-Wasm.
  */
 export async function getAudioDuration(filePath: string): Promise<number> {
-  const taglib = await ensureTagLib();
-
-  let audioFile = null;
   try {
-    // Use smart partial loading for read operations
-    audioFile = await openFile(taglib, filePath);
-
-    const properties = audioFile.audioProperties();
+    // Use Simple API for efficient read operation
+    const properties = await readProperties(filePath);
     return properties?.length || 0;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -83,10 +91,6 @@ export async function getAudioDuration(filePath: string): Promise<number> {
       `Error getting audio duration from ${filePath}: ${errorMessage}`,
     );
     return 0;
-  } finally {
-    if (audioFile) {
-      audioFile.dispose();
-    }
   }
 }
 
@@ -266,6 +270,37 @@ export async function writeReplayGainTags(
 }
 
 /**
+ * Gets comprehensive metadata from an audio file using PropertyMap.
+ * This function accesses ALL metadata fields, including non-standard ones.
+ */
+export async function getComprehensiveMetadataWithPropertyMap(
+  filePath: string,
+): Promise<Record<string, string[]> | null> {
+  const taglib = await ensureTagLib();
+
+  let audioFile = null;
+  try {
+    audioFile = await openFile(taglib, filePath);
+    // @ts-ignore: propertyMap exists at runtime
+    const propMap = audioFile.propertyMap();
+    const properties = propMap.properties();
+
+    // Return all properties as-is for maximum flexibility
+    return properties;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `Error reading property map from ${filePath}: ${errorMessage}`,
+    );
+    return null;
+  } finally {
+    if (audioFile) {
+      audioFile.dispose();
+    }
+  }
+}
+
+/**
  * Gets comprehensive metadata from an audio file.
  * Returns an object with all available metadata.
  */
@@ -297,10 +332,10 @@ export async function getComprehensiveMetadata(
     musicBrainzArtistId?: string;
 
     // ReplayGain
-    replayGainTrackGain?: number;
-    replayGainTrackPeak?: number;
-    replayGainAlbumGain?: number;
-    replayGainAlbumPeak?: number;
+    replayGainTrackGain?: string;
+    replayGainTrackPeak?: string;
+    replayGainAlbumGain?: string;
+    replayGainAlbumPeak?: string;
 
     // Cover art
     hasCoverArt?: boolean;
@@ -409,4 +444,69 @@ export async function getComprehensiveMetadata(
       audioFile.dispose();
     }
   }
+}
+
+/**
+ * Batch check for AcoustID tags across multiple files.
+ * Returns a map of filePath to boolean indicating presence of tags.
+ */
+export async function batchCheckAcoustIDTags(
+  filePaths: string[],
+  concurrency: number = 8,
+): Promise<Map<string, boolean>> {
+  const results = new Map<string, boolean>();
+
+  // Process in chunks for memory efficiency
+  const chunkSize = 100;
+  for (let i = 0; i < filePaths.length; i += chunkSize) {
+    const chunk = filePaths.slice(i, i + chunkSize);
+
+    // Use readMetadataBatch for efficient batch reading
+    const batchResult = await readMetadataBatch(chunk, {
+      concurrency,
+      continueOnError: true,
+    });
+
+    // Check each result for AcoustID tags
+    for (const result of batchResult.results) {
+      if ("error" in result && result.error) {
+        results.set(result.file, false);
+        continue;
+      }
+
+      // Check if we have AcoustID data
+      // Note: May need to use Full API if Simple API doesn't expose these
+      const hasAcoustId = await hasAcoustIDTags(result.file);
+      results.set(result.file, hasAcoustId);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Batch read audio properties for multiple files.
+ * Much faster than reading files individually.
+ */
+export async function batchGetAudioProperties(
+  filePaths: string[],
+  concurrency: number = 8,
+): Promise<Map<string, { duration: number; bitrate: number }>> {
+  const results = new Map<string, { duration: number; bitrate: number }>();
+
+  const batchResult = await readMetadataBatch(filePaths, {
+    concurrency,
+    continueOnError: true,
+  });
+
+  for (const result of batchResult.results) {
+    if (!("error" in result) && result.data.properties) {
+      results.set(result.file, {
+        duration: result.data.properties.length || 0,
+        bitrate: result.data.properties.bitrate || 0,
+      });
+    }
+  }
+
+  return results;
 }

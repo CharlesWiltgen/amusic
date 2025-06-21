@@ -1,4 +1,4 @@
-import { processAcoustIDTagging } from "../lib/acoustid.ts";
+import { batchProcessAcoustIDTagging } from "../lib/acoustid.ts";
 import { calculateReplayGain } from "../lib/replaygain.ts";
 import { getVendorBinaryPath } from "../lib/vendor_tools.ts";
 import type { CommandOptions } from "../types/command.ts";
@@ -72,46 +72,32 @@ export async function easyCommand(
       continue;
     }
 
-    // Step 2: Process AcoustID for each file in the album
+    // Step 2: Batch process AcoustID for all files in the album
+    const albumPaths = files.map((f) => f.path);
 
-    for (const file of files) {
-      if (!options.quiet) console.log("");
+    if (!options.quiet) {
+      console.log(`  Processing ${albumPaths.length} files for AcoustID...`);
+    }
 
-      try {
-        // Check if file already has AcoustID tags
-        const hasAcoustId = file.tags && (
-          "acoustIdFingerprint" in file.tags ||
-          "acoustIdId" in file.tags
-        );
-
-        if (hasAcoustId && !options.force) {
-          if (!options.quiet) {
-            console.log(
-              `  ⏭️  Skipping ${
-                basename(file.path)
-              } (already has AcoustID tags)`,
-            );
+    const batchResults = await batchProcessAcoustIDTagging(
+      albumPaths,
+      options.apiKey!,
+      {
+        force: options.force || false,
+        quiet: options.quiet || false,
+        dryRun: options.dryRun || false,
+        concurrency: 4,
+        onProgress: (processed, total, _currentFile) => {
+          if (!options.quiet && processed % 5 === 0) {
+            console.log(`    Progress: ${processed}/${total} files...`);
           }
-          stats.incrementSkipped();
-          continue;
-        }
+        },
+      },
+    );
 
-        // Process AcoustID tagging
-        const status = await processAcoustIDTagging(
-          file.path,
-          options.apiKey!,
-          options.force || false,
-          options.quiet || false,
-          options.dryRun || false,
-        );
-        stats.increment(status);
-
-        // Note: The actual tags were already written by processAcoustIDTagging
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error(`  ❌ Error processing ${file.path}: ${msg}`);
-        stats.incrementFailed();
-      }
+    // Update stats from batch results
+    for (const [_file, status] of batchResults) {
+      stats.increment(status);
     }
   }
 
@@ -135,8 +121,4 @@ export async function easyCommand(
       console.log(`  Scan errors: ${scanResult.errors.length}`);
     }
   }
-}
-
-function basename(path: string): string {
-  return path.split("/").pop() || path;
 }

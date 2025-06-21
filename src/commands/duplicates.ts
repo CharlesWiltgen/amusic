@@ -1,6 +1,7 @@
 import { Table } from "jsr:@cliffy/table@1.0.0-rc.7";
 import { findDuplicateTracks } from "../lib/folder_operations.ts";
 import { validateDirectory } from "../utils/console_output.ts";
+import { formatDuration } from "../utils/format.ts";
 
 export interface DuplicatesOptions {
   quiet?: boolean;
@@ -131,10 +132,4 @@ export async function duplicatesCommand(
     );
     Deno.exit(1);
   }
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }

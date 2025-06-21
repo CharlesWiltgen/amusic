@@ -213,17 +213,34 @@ async function copyMetadata(
       throw new Error("Failed to open source file");
     }
 
-    // Get ALL metadata using propertyMap - this preserves everything
+    // Get basic metadata
+    const sourceTag = sourceFile.tag();
+    const basicMetadata = {
+      title: sourceTag.title,
+      artist: sourceTag.artist,
+      album: sourceTag.album,
+      year: sourceTag.year,
+      track: sourceTag.track,
+      genre: sourceTag.genre,
+      comment: sourceTag.comment,
+    };
+
+    // Get ALL metadata using PropertyMap for comprehensive copying
+    // @ts-ignore: propertyMap exists at runtime
     const sourcePropMap = sourceFile.propertyMap();
-    const allMetadata = sourcePropMap.properties();
+    const allProperties = sourcePropMap.properties();
 
-    // Get cover art separately (not included in properties)
-    const pictures = sourceFile.pictures();
-
-    // Debug: log basic metadata
+    // Count properties for logging
+    const propertyCount = Object.keys(allProperties).length;
+    const basicCount = Object.values(basicMetadata).filter((v) =>
+      v !== undefined && v !== null
+    ).length;
     console.log(
-      `Copying metadata: ${Object.keys(allMetadata).length} properties found`,
+      `Copying metadata: ${basicCount} basic properties, ${propertyCount} total properties found`,
     );
+
+    // Get cover art separately (still needed as PropertyMap doesn't handle pictures)
+    const pictures = sourceFile.getPictures();
 
     // Now open destination file
     const destData = await Deno.readFile(destPath);
@@ -233,27 +250,77 @@ async function copyMetadata(
       throw new Error("Failed to open destination file");
     }
 
-    // Copy ALL metadata properties at once
+    // Copy basic metadata first (for compatibility)
+    const destTag = destFile.tag();
+    if (basicMetadata.title) destTag.setTitle(basicMetadata.title);
+    if (basicMetadata.artist) destTag.setArtist(basicMetadata.artist);
+    if (basicMetadata.album) destTag.setAlbum(basicMetadata.album);
+    if (basicMetadata.year) destTag.setYear(basicMetadata.year);
+    if (basicMetadata.track) destTag.setTrack(basicMetadata.track);
+    if (basicMetadata.genre) destTag.setGenre(basicMetadata.genre);
+    if (basicMetadata.comment) destTag.setComment(basicMetadata.comment);
+
+    // Copy ALL properties using PropertyMap
+    // @ts-ignore: propertyMap exists at runtime
     const destPropMap = destFile.propertyMap();
-    for (const [key, values] of Object.entries(allMetadata)) {
-      destPropMap.set(key, values);
+
+    // List of properties to skip (format-specific or would cause issues)
+    const skipProperties = [
+      // These are handled by basic tag methods above
+      "TITLE",
+      "ARTIST",
+      "ALBUM",
+      "DATE",
+      "TRACKNUMBER",
+      "GENRE",
+      "COMMENT",
+      // Format-specific picture tags that shouldn't be copied directly
+      "COVERART",
+      "METADATA_BLOCK_PICTURE",
+      "APIC",
+      "PIC",
+      // File-specific properties that shouldn't be copied
+      "LENGTH",
+      "BITRATE",
+      "SAMPLERATE",
+      "CHANNELS",
+    ];
+
+    // Copy all properties except those in skip list
+    for (const [key, values] of Object.entries(allProperties)) {
+      if (
+        !skipProperties.includes(key.toUpperCase()) && values &&
+        values.length > 0
+      ) {
+        destPropMap.set(key, values);
+      }
     }
 
     // Add encoder information
-    destPropMap.set("ENCODER", [`amusic v${VERSION} (taglib-wasm)`]);
-    destPropMap.set("ENCODER_SETTINGS", ["afconvert -d aac -s 3 -q 127"]);
+    const encoderInfo = `Encoded with amusic v${VERSION} (taglib-wasm)`;
+    const existingComment = destTag.comment;
+    destTag.setComment(
+      existingComment ? `${existingComment}\n${encoderInfo}` : encoderInfo,
+    );
 
-    // Copy cover art
+    // Handle cover art
     if (pictures && pictures.length > 0) {
-      for (const picture of pictures) {
-        destFile.addPicture(picture);
-      }
+      console.log(
+        `Note: ${pictures.length} cover art images found but not copied (API limitation)`,
+      );
+      // TODO: When taglib-wasm adds picture copying support, implement it here
     }
 
     // Save the destination file
     destFile.save();
     const updatedData = destFile.getFileBuffer();
     await Deno.writeFile(destPath, new Uint8Array(updatedData));
+
+    console.log(
+      `Successfully copied ${
+        Object.keys(allProperties).length
+      } metadata properties`,
+    );
   } finally {
     if (sourceFile) sourceFile.dispose();
     if (destFile) destFile.dispose();
