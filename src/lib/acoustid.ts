@@ -6,6 +6,7 @@ import {
   hasAcoustIDTags,
   writeAcoustIDTags,
 } from "./tagging.ts";
+import { ACOUSTID_API_URL, DEFAULT_CONCURRENCY } from "../constants.ts";
 export { getAcoustIDTags, hasAcoustIDTags, writeAcoustIDTags };
 
 export interface FpcalcResult {
@@ -60,7 +61,6 @@ export interface LookupResult {
 export async function generateFingerprint(
   filePath: string,
 ): Promise<string | null> {
-  // console.log("  Generating AcoustID fingerprint with fpcalc..."); // Moved to caller
   const fpcalcPath = getVendorBinaryPath("fpcalc");
   const command = new Deno.Command(fpcalcPath, {
     args: ["-json", filePath],
@@ -102,7 +102,7 @@ export async function lookupFingerprint(
   apiKey: string,
 ): Promise<LookupResult | null> {
   const apiUrl =
-    `https://api.acoustid.org/v2/lookup?client=${apiKey}&meta=recordings+releasegroups+compress&duration=${
+    `${ACOUSTID_API_URL}?client=${apiKey}&meta=recordings+releasegroups+compress&duration=${
       Math.round(duration)
     }&fingerprint=${fingerprint}`;
   if (!apiKey) {
@@ -111,13 +111,11 @@ export async function lookupFingerprint(
   }
 
   try {
-    // console.log(`  Querying AcoustID API: ${apiUrl}`); // For debugging, can be noisy
     const response = await fetch(apiUrl);
     if (!response.ok) {
       console.error(
         `  AcoustID API error: ${response.status} ${response.statusText}`,
       );
-      // console.error(`    Response body: ${await response.text()}`); // For more detailed debugging
       return null;
     }
     const data = await response.json();
@@ -320,7 +318,7 @@ export async function batchProcessAcoustIDTagging(
     force = false,
     quiet = true,
     dryRun = false,
-    concurrency = 4,
+    concurrency = DEFAULT_CONCURRENCY,
     onProgress,
   } = options;
   const results = new Map<string, ProcessResultStatus>();

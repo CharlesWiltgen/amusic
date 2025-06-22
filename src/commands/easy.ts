@@ -1,14 +1,10 @@
-import { batchProcessAcoustIDTagging } from "../lib/acoustid.ts";
-import { calculateReplayGain } from "../lib/replaygain.ts";
 import { getVendorBinaryPath } from "../lib/vendor_tools.ts";
 import type { CommandOptions } from "../types/command.ts";
 import { ensureCommandExists } from "../utils/command.ts";
 import { ProcessingStats } from "../utils/processing_stats.ts";
-import { exitWithError, validateDirectory } from "../utils/console_output.ts";
-import {
-  groupFilesByDirectory,
-  scanMusicDirectory,
-} from "../lib/folder_operations.ts";
+import { exitWithError } from "../utils/console_output.ts";
+import { analyzeFolderStructure } from "../lib/folder_processor.ts";
+import { processAlbum } from "../lib/track_processor.ts";
 
 /**
  * Enhanced easy mode using the Folder API for better performance
@@ -28,76 +24,74 @@ export async function easyCommand(
 
   await ensureCommandExists(fpcalcPath);
   await ensureCommandExists(rsgainPath);
-  await validateDirectory(library);
 
   const stats = new ProcessingStats();
 
   if (!options.quiet) {
-    console.log("🎵 Scanning music library...");
+    console.log("🎵 Analyzing music library structure...\n");
   }
 
-  // Use Folder API to scan the entire library at once
-  const scanResult = await scanMusicDirectory(library, {
-    recursive: true,
-    onProgress: (processed, total, _currentFile) => {
-      if (!options.quiet && processed % 50 === 0) {
-        console.log(`  Scanned ${processed}/${total} files...`);
-      }
-    },
-    concurrency: 8,
+  // Use the new folder analyzer to find albums
+  const folderAnalysis = await analyzeFolderStructure([library], {
+    singlesPatterns: [], // Easy mode treats everything as albums
+    quiet: options.quiet,
   });
 
   if (!options.quiet) {
     console.log(
-      `✅ Found ${scanResult.totalFound} audio files in ${scanResult.files.length} albums\n`,
+      `\n✅ Found ${folderAnalysis.albums.size} albums to process\n`,
     );
   }
 
-  // Group files by directory (album)
-  const albumDirectories = groupFilesByDirectory(scanResult.files);
+  if (folderAnalysis.singles.length > 0 && !options.quiet) {
+    console.warn(
+      `⚠️  Found ${folderAnalysis.singles.length} single files not in album folders. ` +
+        `These will be skipped in easy mode.\n`,
+    );
+  }
 
-  // Process each album
-  for (const [albumDir, files] of albumDirectories) {
+  // Process each album using unified track processor
+  for (const [albumDir, files] of folderAnalysis.albums) {
     if (!options.quiet) {
       console.log(`\n📁 Processing album: ${albumDir}`);
       console.log(`  Files: ${files.length}`);
     }
 
-    // Step 1: Calculate ReplayGain for the album
-    const replayGainResult = await calculateReplayGain(albumDir, options.quiet);
-    if (!replayGainResult.success) {
-      console.error(
-        `  ❌ ReplayGain calculation failed for album "${albumDir}". Skipping AcoustID tagging.`,
-      );
-      continue;
-    }
+    // No need to map paths, 'files' already contains the paths
 
-    // Step 2: Batch process AcoustID for all files in the album
-    const albumPaths = files.map((f) => f.path);
+    // Use unified track processor for album
+    const results = await processAlbum(albumDir, files, {
+      calculateGain: true, // Always calculate ReplayGain in easy mode
+      processAcoustID: true, // Always process AcoustID in easy mode
+      acoustIDApiKey: options.apiKey,
+      forceAcoustID: options.force,
+      quiet: options.quiet,
+      dryRun: options.dryRun,
+      concurrency: 4,
+      onProgress: (processed, total) => {
+        if (!options.quiet) {
+          Deno.stdout.writeSync(
+            new TextEncoder().encode(
+              `\x1b[2K\r  Progress: ${processed}/${total} tracks`,
+            ),
+          );
+        }
+      },
+    });
 
     if (!options.quiet) {
-      console.log(`  Processing ${albumPaths.length} files for AcoustID...`);
+      console.log(""); // New line after progress
     }
 
-    const batchResults = await batchProcessAcoustIDTagging(
-      albumPaths,
-      options.apiKey!,
-      {
-        force: options.force || false,
-        quiet: options.quiet || false,
-        dryRun: options.dryRun || false,
-        concurrency: 4,
-        onProgress: (processed, total, _currentFile) => {
-          if (!options.quiet && processed % 5 === 0) {
-            console.log(`    Progress: ${processed}/${total} files...`);
-          }
-        },
-      },
-    );
-
-    // Update stats from batch results
-    for (const [_file, status] of batchResults) {
-      stats.increment(status);
+    // Update stats from results
+    for (const result of results) {
+      if (result.acoustIDStatus) {
+        stats.increment(result.acoustIDStatus);
+      } else if (result.acoustIDError || result.replayGainError) {
+        stats.incrementFailed();
+      } else {
+        stats.increment("processed");
+      }
     }
   }
 
@@ -106,19 +100,16 @@ export async function easyCommand(
   // Optional: Show library statistics
   if (!options.quiet) {
     console.log("\n📊 Library Statistics:");
-    console.log(`  Total albums: ${albumDirectories.size}`);
-    console.log(`  Total tracks: ${scanResult.totalFound}`);
+    console.log(`  Total albums: ${folderAnalysis.albums.size}`);
 
-    const totalDuration = scanResult.files.reduce(
-      (sum, f) => sum + (f.properties?.length || 0),
-      0,
-    );
-    const hours = Math.floor(totalDuration / 3600);
-    const minutes = Math.floor((totalDuration % 3600) / 60);
-    console.log(`  Total duration: ${hours}h ${minutes}m`);
+    let totalTracks = 0;
+    for (const [_albumDir, files] of folderAnalysis.albums) {
+      totalTracks += files.length;
+    }
+    console.log(`  Total tracks: ${totalTracks}`);
 
-    if (scanResult.errors.length > 0) {
-      console.log(`  Scan errors: ${scanResult.errors.length}`);
+    if (folderAnalysis.singles.length > 0) {
+      console.log(`  Skipped singles: ${folderAnalysis.singles.length}`);
     }
   }
 }

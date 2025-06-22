@@ -10,6 +10,7 @@ import {
   validateAudioFiles,
 } from "../utils/console_output.ts";
 import { showTagsWithFolderAPI } from "./show_tags_folder.ts";
+import { HIGH_CONCURRENCY } from "../constants.ts";
 
 export async function defaultCommand(
   options: CommandOptions,
@@ -74,7 +75,7 @@ export async function defaultCommand(
         force: options.force || false,
         quiet: options.quiet || false,
         dryRun: options.dryRun || false,
-        concurrency: 8,
+        concurrency: HIGH_CONCURRENCY,
         onProgress: (processed, total, _currentFile) => {
           if (!options.quiet) {
             // Move cursor to beginning of line and clear it

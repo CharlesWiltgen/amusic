@@ -31,7 +31,7 @@ async function setVersion(newVersion: string): Promise<void> {
   const config = await readDenoJson();
   config.version = newVersion;
   await writeDenoJson(config);
-  console.log(`✅ Version updated to ${newVersion}`);
+  console.log(`✅ Version updated to ${config.version}`);
 }
 
 async function bumpVersion(
@@ -51,7 +51,10 @@ async function bumpVersion(
     Deno.exit(1);
   }
 
-  await setVersion(newVersion.toString());
+  // Format the version properly
+  const versionString =
+    `${newVersion.major}.${newVersion.minor}.${newVersion.patch}`;
+  await setVersion(versionString);
 }
 
 const command = new Command()

@@ -77,6 +77,19 @@ interface FileMetadata {
   coverArtCount?: number;
 }
 
+// Extend the taglib-wasm tags type to include AcoustID fields
+interface ExtendedTags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  year?: number;
+  track?: number;
+  genre?: string;
+  comment?: string;
+  acoustIdFingerprint?: string;
+  acoustIdId?: string;
+}
+
 /**
  * Display tags using the new batch API for maximum performance
  */
@@ -136,15 +149,16 @@ export async function showTagsWithFolderAPI(
       }
 
       const { data } = result;
+      const tags = data.tags as ExtendedTags | undefined;
       const metadata: FileMetadata = {
         path: result.file,
-        title: data.tags?.title,
-        artist: data.tags?.artist,
-        album: data.tags?.album,
-        year: data.tags?.year,
-        track: data.tags?.track,
-        genre: data.tags?.genre,
-        comment: data.tags?.comment,
+        title: tags?.title,
+        artist: tags?.artist,
+        album: tags?.album,
+        year: tags?.year,
+        track: tags?.track,
+        genre: tags?.genre,
+        comment: tags?.comment,
         duration: data.properties?.length,
         bitrate: data.properties?.bitrate,
         sampleRate: data.properties?.sampleRate,
@@ -156,10 +170,9 @@ export async function showTagsWithFolderAPI(
         replayGainTrackPeak: data.dynamics?.replayGainTrackPeak,
         replayGainAlbumGain: data.dynamics?.replayGainAlbumGain,
         replayGainAlbumPeak: data.dynamics?.replayGainAlbumPeak,
-        // @ts-ignore: AcoustID fields may exist
-        acoustIdFingerprint: data.tags?.acoustIdFingerprint,
-        // @ts-ignore: AcoustID fields may exist
-        acoustIdId: data.tags?.acoustIdId,
+        // AcoustID fields now properly typed
+        acoustIdFingerprint: tags?.acoustIdFingerprint,
+        acoustIdId: tags?.acoustIdId,
         // Cover art is now available in batch API!
         hasCoverArt: data.hasCoverArt || false,
         coverArtCount: data.hasCoverArt ? 1 : 0, // API doesn't provide count

@@ -224,9 +224,6 @@ Deno.test("amusic.ts Integration Tests", async (t) => {
         ),
       "Expected error message for non-existent file",
     );
-    // if (result.code === 0) {
-    //   console.warn("  NOTE: amusic.ts exited with code 0 even for a single non-existent file.");
-    // }
 
     await cleanupTestDir(currentTestDir);
   });

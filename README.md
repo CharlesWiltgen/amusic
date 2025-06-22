@@ -17,6 +17,16 @@ fingerprints.
   fingerprint (`ACOUSTID_FINGERPRINT` tag). This uniquely identifies an audio
   file (typically a music track), which will later help associate the audio file
   with metadata including Title, Artist, Album, and lots more.
+- **High-quality AAC encoding** — On macOS, `amusic` can encode lossless audio
+  (FLAC, WAV, ALAC) to audibly-transparent `.m4a` files using Apple's Core Audio
+  framework.
+- **Intelligent Folder Processing** — Automatically treats folders as albums by
+  default, with support for processing entire music libraries organized by
+  artist/album hierarchy.
+- **Parallel Processing** — Uses worker pools to process multiple tracks
+  concurrently for improved performance.
+- **Unified Processing** — Process tracks once with multiple operations
+  (encoding, ReplayGain, AcoustID) in a single pass.
 - **Force Overwrite** — Optionally, users can force AcoustID fingerprints to be
   re-calculated and overwritten even for files that already have them using the
   `--force` flag.
@@ -28,9 +38,7 @@ fingerprints.
 ### To Do
 
 - 🚧 **Apple SoundCheck generation** — Calculates and embeds Apple SoundCheck
-  metadata, which is Apple’s equivalent of ReplayGain.
-- 🚧 **Ultra high-quality AAC encoding** — On macOS, `amusic` will be able to
-  encode lossless audio (FLAC, WAV) to audibly-transparent `.m4a` files.
+  metadata, which is Apple's equivalent of ReplayGain.
 
 ### AcoustID Processing Details
 
@@ -43,15 +51,13 @@ option or by setting the `ACOUSTID_API_KEY` environment variable:
 export ACOUSTID_API_KEY=your_api_key_here
 
 # Then run without repeating the flag:
-deno run --allow-read --allow-run --allow-write --allow-env --allow-net src/amusic.ts \
-  <file1> [file2 ...]
+amusic <file1> [file2 ...]
 ```
 
 Alternatively, you can pass the key directly:
 
 ```bash
-deno run --allow-read --allow-run --allow-write --allow-env src/amusic.ts \
-  --api-key $ACOUSTID_API_KEY <file1> [file2 ...]
+amusic --api-key $ACOUSTID_API_KEY <file1> [file2 ...]
 ```
 
 It retrieves and embeds the `ACOUSTID_ID` (the UUID from the AcoustID database);
@@ -126,7 +132,7 @@ Extract the archive and optionally move the binary to a location in your PATH.
 > The build task will automatically remove any quarantine attributes and perform
 > an ad-hoc code signing of the generated `dist/amusic` binary so that the
 > embedded vendor tools (`fpcalc`/`rsgain`) can be executed without encountering
-> “No such file or directory (os error 2)”.
+> "No such file or directory (os error 2)".
 
 ## Usage
 
@@ -174,46 +180,115 @@ deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.t
 After processing all files, a summary report is displayed, showing the number of
 files successfully processed, skipped, and failed.
 
-**Examples:**
+## Commands
+
+### Default Command: AcoustID Processing
+
+Process files to generate and embed AcoustID fingerprints:
+
+```bash
+amusic [options] <files...>
+```
+
+### Easy Mode: Process Music Library
+
+Process a music library organized by album folders. Calculates ReplayGain for
+each album and AcoustID for each track:
+
+```bash
+amusic easy <library> [options]
+```
+
+### Process Command: Unified Processing
+
+Process audio files with multiple operations in a single pass. By default,
+folders are treated as albums:
+
+```bash
+amusic process [options] <paths...>
+```
+
+Options:
+
+- `--encode`: Encode files to M4A/AAC format
+- `--replay-gain`: Calculate and apply ReplayGain metadata
+- `--acoust-id`: Generate and embed AcoustID fingerprints
+- `--singles <patterns...>`: Folder patterns to treat as singles instead of
+  albums
+- `-o, --output-dir <dir>`: Output directory for encoded files
+- `--force-lossy-transcodes`: Allow encoding from lossy formats (not
+  recommended)
+
+### Encode Command: High-Quality AAC Encoding
+
+Encode lossless audio files to M4A/AAC format (macOS only):
+
+```bash
+amusic encode [options] <files...>
+```
+
+Options:
+
+- `-o, --output-dir <dir>`: Output directory for encoded files
+- `--flatten-output`: Put all output files in a single directory
+- `--force-lossy-transcodes`: Allow encoding from lossy formats (MP3, OGG)
+
+## Folder Processing Behavior
+
+By default, `amusic` intelligently processes folders:
+
+- **Leaf folders** (containing audio files but no subfolders) are treated as
+  **albums**
+- **Parent folders** (containing subfolders) have each subfolder processed as
+  potential albums
+- **Singles override**: Use `--singles` patterns to treat specific folders as
+  collections of individual tracks
+
+This makes it easy to process entire music libraries organized by artist/album
+hierarchy.
+
+## Examples
 
 1. **Generate and add fingerprint to an audio file:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "./path/to/your/music file.mp3"
+   amusic "./path/to/your/music file.mp3"
    ```
 
-2. **Process an album directory:** Calculate and embed ReplayGain metadata and
+2. **Process an album folder:** Calculate and embed ReplayGain metadata and
    generate AcoustID fingerprints for all tracks in a single folder:
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts "/path/to/album_folder"
+   amusic process --replay-gain --acoust-id "/path/to/album_folder"
    ```
 
-3. **Process multiple files, one of them with forced overwrite:**
+3. **Process multiple artists with some singles folders:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --force "./path/to/your/music file.flac" "./another/audio.ogg"
+   amusic process --encode --replay-gain --acoust-id \
+     --singles "Singles" --singles "Compilations" \
+     "/Music/Prince" "/Music/Madonna" "/Music/Singles"
    ```
 
-4. **Process a file in quiet mode:**
+4. **Encode a library to a new location preserving structure:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts --quiet "./path/to/quiet_process.mp3"
+   amusic encode -o "/path/to/output" "/path/to/lossless/library"
    ```
 
-5. **Perform a lookup using the environment variable (preferred):**
+5. **Easy Mode: Process entire music library:**
 
    ```bash
-   export ACOUSTID_API_KEY=your_api_key_here
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts \
-     ./path/to/your/music/file.mp3
+   amusic easy /path/to/music/library --api-key $ACOUSTID_API_KEY
    ```
 
-6. **Easy Mode: Process a music library organized by album folders. Calculates
-   ReplayGain for each album and AcousticID for each track:**
+6. **Process with unified command for maximum efficiency:**
 
    ```bash
-   deno run --allow-read --allow-run --allow-write --allow-env --allow-net amusic.ts easy /path/to/music/library --api-key $ACOUSTID_API_KEY
+   # Process everything in one pass: encode to M4A, calculate ReplayGain, and add AcoustID
+   amusic process --encode --replay-gain --acoust-id \
+     --output-dir "/Music/Encoded" \
+     "/Music/Lossless/Artist1" "/Music/Lossless/Artist2"
    ```
 
 ## Contributing
