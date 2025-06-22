@@ -48,9 +48,11 @@ export async function encodeToM4A(
       "-d",
       "aac", // AAC codec
       "-s",
-      "3", // VBR mode 3
+      "2", // Bitrate allocation strategy (Constrained VBR)
       "-q",
-      "127", // Quality 127 (highest quality)
+      "127", // VBR quality 127 (highest quality)
+      "-b",
+      "320000", // Bitrate up to 320 kbps
       inputPath,
       outputPath,
     ],
@@ -130,8 +132,8 @@ export async function isLosslessFormat(filePath: string): Promise<boolean> {
       }
 
       // Use the isLossless property from TagLib-Wasm
-      return audioProps.isLossless || false;
-    } catch (_error) {
+      return audioProps.isLossless ?? false;
+    } catch {
       // For non-existent files or read errors, just return false without logging
       // This is expected in tests and when checking non-existent paths
       return false;
@@ -193,6 +195,96 @@ export function generateOutputPath(
 }
 
 /**
+ * Extract basic metadata from source file
+ */
+// deno-lint-ignore no-explicit-any
+function extractBasicMetadata(sourceTag: any) {
+  return {
+    title: sourceTag.title,
+    artist: sourceTag.artist,
+    album: sourceTag.album,
+    year: sourceTag.year,
+    track: sourceTag.track,
+    genre: sourceTag.genre,
+    comment: sourceTag.comment,
+  };
+}
+
+/**
+ * Apply basic metadata to destination file
+ */
+// deno-lint-ignore no-explicit-any
+function applyBasicMetadata(destTag: any, metadata: any) {
+  if (metadata.title) destTag.setTitle(metadata.title);
+  if (metadata.artist) destTag.setArtist(metadata.artist);
+  if (metadata.album) destTag.setAlbum(metadata.album);
+  if (metadata.year) destTag.setYear(metadata.year);
+  if (metadata.track) destTag.setTrack(metadata.track);
+  if (metadata.genre) destTag.setGenre(metadata.genre);
+  if (metadata.comment) destTag.setComment(metadata.comment);
+}
+
+/**
+ * Filter properties that should be copied
+ */
+function filterPropertiesToCopy(
+  allProperties: Record<string, string[]>,
+): Record<string, string[]> {
+  const skipProperties = [
+    "TITLE",
+    "ARTIST",
+    "ALBUM",
+    "DATE",
+    "TRACKNUMBER",
+    "GENRE",
+    "COMMENT",
+    "COVERART",
+    "METADATA_BLOCK_PICTURE",
+    "APIC",
+    "PIC",
+    "LENGTH",
+    "BITRATE",
+    "SAMPLERATE",
+    "CHANNELS",
+  ];
+
+  const propertiesToCopy: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(allProperties)) {
+    if (
+      !skipProperties.includes(key.toUpperCase()) && values &&
+      Array.isArray(values) && values.length > 0
+    ) {
+      propertiesToCopy[key] = values;
+    }
+  }
+  return propertiesToCopy;
+}
+
+/**
+ * Copy cover art from source to destination file
+ */
+// deno-lint-ignore no-explicit-any
+function copyCoverArt(sourceFile: any, destFile: any): number {
+  const pictures = sourceFile.getPictures();
+  if (!pictures || pictures.length === 0) {
+    return 0;
+  }
+
+  try {
+    destFile.setPictures(pictures);
+    console.log(`   Copied ${pictures.length} cover art image(s)`);
+    return pictures.length;
+  } catch (error) {
+    console.log(
+      `   Warning: Failed to copy ${pictures.length} cover art image(s): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return 0;
+  }
+}
+
+/**
  * Copies metadata from source file to destination file using TagLib
  * Uses the PropertyMap API to ensure ALL metadata is preserved
  */
@@ -207,7 +299,7 @@ async function copyMetadata(
   try {
     // Read source file
     const sourceData = await Deno.readFile(sourcePath);
-    sourceFile = await taglib.open(sourceData, sourcePath);
+    sourceFile = await taglib.open(sourceData);
 
     if (!sourceFile) {
       throw new Error("Failed to open source file");
@@ -215,19 +307,11 @@ async function copyMetadata(
 
     // Get basic metadata
     const sourceTag = sourceFile.tag();
-    const basicMetadata = {
-      title: sourceTag.title,
-      artist: sourceTag.artist,
-      album: sourceTag.album,
-      year: sourceTag.year,
-      track: sourceTag.track,
-      genre: sourceTag.genre,
-      comment: sourceTag.comment,
-    };
+    const basicMetadata = extractBasicMetadata(sourceTag);
 
-    // Get ALL metadata using properties() method
-    // @ts-ignore: properties exists at runtime
-    const allProperties = sourceFile.properties() || {};
+    // Get ALL metadata using propertyMap() method
+    // @ts-ignore: propertyMap exists at runtime
+    const allProperties = sourceFile.propertyMap() ?? {};
 
     // Count properties for logging
     const propertyCount = Object.keys(allProperties).length;
@@ -239,11 +323,11 @@ async function copyMetadata(
     );
 
     // Get cover art separately (still needed as PropertyMap doesn't handle pictures)
-    const pictures = sourceFile.getPictures();
+    // This will be copied later after destination file is open
 
     // Now open destination file
     const destData = await Deno.readFile(destPath);
-    destFile = await taglib.open(destData, destPath);
+    destFile = await taglib.open(destData);
 
     if (!destFile) {
       throw new Error("Failed to open destination file");
@@ -251,52 +335,15 @@ async function copyMetadata(
 
     // Copy basic metadata first (for compatibility)
     const destTag = destFile.tag();
-    if (basicMetadata.title) destTag.setTitle(basicMetadata.title);
-    if (basicMetadata.artist) destTag.setArtist(basicMetadata.artist);
-    if (basicMetadata.album) destTag.setAlbum(basicMetadata.album);
-    if (basicMetadata.year) destTag.setYear(basicMetadata.year);
-    if (basicMetadata.track) destTag.setTrack(basicMetadata.track);
-    if (basicMetadata.genre) destTag.setGenre(basicMetadata.genre);
-    if (basicMetadata.comment) destTag.setComment(basicMetadata.comment);
+    applyBasicMetadata(destTag, basicMetadata);
 
-    // Copy ALL properties using setProperties()
-    // List of properties to skip (format-specific or would cause issues)
-    const skipProperties = [
-      // These are handled by basic tag methods above
-      "TITLE",
-      "ARTIST",
-      "ALBUM",
-      "DATE",
-      "TRACKNUMBER",
-      "GENRE",
-      "COMMENT",
-      // Format-specific picture tags that shouldn't be copied directly
-      "COVERART",
-      "METADATA_BLOCK_PICTURE",
-      "APIC",
-      "PIC",
-      // File-specific properties that shouldn't be copied
-      "LENGTH",
-      "BITRATE",
-      "SAMPLERATE",
-      "CHANNELS",
-    ];
-
-    // Filter out properties that should be skipped
-    const propertiesToCopy: Record<string, string[]> = {};
-    for (const [key, values] of Object.entries(allProperties)) {
-      if (
-        !skipProperties.includes(key.toUpperCase()) && values &&
-        Array.isArray(values) && values.length > 0
-      ) {
-        propertiesToCopy[key] = values;
-      }
-    }
+    // Copy ALL properties using setPropertyMap()
+    const propertiesToCopy = filterPropertiesToCopy(allProperties);
 
     // Copy all filtered properties at once
     if (Object.keys(propertiesToCopy).length > 0) {
-      // @ts-ignore: setProperties exists at runtime
-      destFile.setProperties(propertiesToCopy);
+      // @ts-ignore: setPropertyMap exists at runtime
+      destFile.setPropertyMap(propertiesToCopy);
     }
 
     // Add encoder information
@@ -307,12 +354,7 @@ async function copyMetadata(
     );
 
     // Handle cover art
-    if (pictures && pictures.length > 0) {
-      console.log(
-        `Note: ${pictures.length} cover art images found but not copied (API limitation)`,
-      );
-      // TODO: When taglib-wasm adds picture copying support, implement it here
-    }
+    const pictureCount = copyCoverArt(sourceFile, destFile);
 
     // Save the destination file
     destFile.save();
@@ -322,7 +364,9 @@ async function copyMetadata(
     console.log(
       `Successfully copied ${
         Object.keys(allProperties).length
-      } metadata properties`,
+      } metadata properties${
+        pictureCount > 0 ? ` and ${pictureCount} cover art image(s)` : ""
+      }`,
     );
   } finally {
     if (sourceFile) sourceFile.dispose();

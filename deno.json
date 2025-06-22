@@ -1,6 +1,6 @@
 {
   "name": "amusic",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "exports": {},
   "tasks": {
     "start": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net src/amusic.ts",

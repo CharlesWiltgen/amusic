@@ -8,7 +8,7 @@ import {
   type FolderScanOptions,
   type FolderScanResult,
   scanFolder as taglibScanFolder,
-} from "jsr:@charlesw/taglib-wasm";
+} from "npm:taglib-wasm@latest";
 import { SUPPORTED_EXTENSIONS } from "../utils/file_discovery.ts";
 import { ensureTagLib } from "./taglib_init.ts";
 
@@ -17,7 +17,7 @@ import {
   exportFolderMetadata,
   findDuplicates,
   updateFolderTags,
-} from "jsr:@charlesw/taglib-wasm";
+} from "npm:taglib-wasm@latest";
 
 /**
  * Scan a directory for audio files and retrieve their metadata

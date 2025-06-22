@@ -1,4 +1,4 @@
-import { readMetadataBatch } from "jsr:@charlesw/taglib-wasm";
+import { readMetadataBatch } from "npm:taglib-wasm@latest";
 import { formatChannels, formatDuration } from "../utils/format.ts";
 
 /**

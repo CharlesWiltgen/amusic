@@ -1,9 +1,9 @@
-import type { TagLib } from "jsr:@charlesw/taglib-wasm";
+import type { TagLib } from "npm:taglib-wasm@latest";
 import {
   readMetadataBatch,
   readProperties,
   readTags,
-} from "jsr:@charlesw/taglib-wasm/simple";
+} from "npm:taglib-wasm@latest/simple";
 import { ensureTagLib } from "./taglib_init.ts";
 import { readFileAsync } from "../utils/async-file-reader.ts";
 
@@ -281,8 +281,8 @@ export async function getComprehensiveMetadataWithPropertyMap(
   let audioFile = null;
   try {
     audioFile = await openFile(taglib, filePath);
-    // @ts-ignore: properties exists at runtime
-    const properties = audioFile.properties();
+    // @ts-ignore: propertyMap exists at runtime
+    const properties = audioFile.propertyMap();
 
     // Return all properties as-is for maximum flexibility
     return properties;
