@@ -310,6 +310,7 @@ async function copyMetadata(
     const basicMetadata = extractBasicMetadata(sourceTag);
 
     // Get ALL metadata using properties() method
+    // Note: properties() returns the complete property map
     const allProperties = sourceFile.properties() || {};
 
     // Count properties for logging
