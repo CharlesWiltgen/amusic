@@ -2,7 +2,10 @@
  * Centralized TagLib initialization that handles both development and compiled binaries
  */
 
-import { TagLib } from "npm:taglib-wasm@latest";
+import {
+  initializeForDenoCompile,
+  type TagLib,
+} from "jsr:@charlesw/taglib-wasm";
 
 // Singleton instance
 let taglibInstance: TagLib | null = null;
@@ -12,8 +15,9 @@ let taglibInstance: TagLib | null = null;
  */
 export async function ensureTagLib(): Promise<TagLib> {
   if (!taglibInstance) {
-    // Initialize TagLib - it will automatically handle WASM loading
-    taglibInstance = await TagLib.initialize();
+    // Use initializeForDenoCompile which automatically handles
+    // both development mode and compiled binary mode
+    taglibInstance = await initializeForDenoCompile();
   }
   return taglibInstance!;
 }

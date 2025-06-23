@@ -1,9 +1,9 @@
-import type { TagLib } from "npm:taglib-wasm@latest";
+import type { TagLib } from "jsr:@charlesw/taglib-wasm";
 import {
   readMetadataBatch,
   readProperties,
   readTags,
-} from "npm:taglib-wasm@latest/simple";
+} from "jsr:@charlesw/taglib-wasm/simple";
 import { ensureTagLib } from "./taglib_init.ts";
 import { readFileAsync } from "../utils/async-file-reader.ts";
 
