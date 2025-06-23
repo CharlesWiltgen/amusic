@@ -309,9 +309,8 @@ async function copyMetadata(
     const sourceTag = sourceFile.tag();
     const basicMetadata = extractBasicMetadata(sourceTag);
 
-    // Get ALL metadata using propertyMap() method
-    // @ts-ignore: propertyMap exists at runtime
-    const allProperties = sourceFile.propertyMap() ?? {};
+    // Get ALL metadata using properties() method
+    const allProperties = sourceFile.properties() || {};
 
     // Count properties for logging
     const propertyCount = Object.keys(allProperties).length;
@@ -342,8 +341,8 @@ async function copyMetadata(
 
     // Copy all filtered properties at once
     if (Object.keys(propertiesToCopy).length > 0) {
-      // @ts-ignore: setPropertyMap exists at runtime
-      destFile.setPropertyMap(propertiesToCopy);
+      // Set properties directly on the file
+      destFile.setProperties(propertiesToCopy);
     }
 
     // Add encoder information
