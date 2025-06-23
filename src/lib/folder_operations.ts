@@ -8,7 +8,7 @@ import {
   type FolderScanOptions,
   type FolderScanResult,
   scanFolder as taglibScanFolder,
-} from "jsr:@charlesw/taglib-wasm";
+} from "jsr:@charlesw/taglib-wasm@0.5.4";
 import { SUPPORTED_EXTENSIONS } from "../utils/file_discovery.ts";
 import { ensureTagLib } from "./taglib_init.ts";
 
@@ -17,7 +17,7 @@ import {
   exportFolderMetadata,
   findDuplicates,
   updateFolderTags,
-} from "jsr:@charlesw/taglib-wasm";
+} from "jsr:@charlesw/taglib-wasm@0.5.4";
 
 /**
  * Scan a directory for audio files and retrieve their metadata
@@ -32,14 +32,14 @@ export async function scanMusicDirectory(
       total: number,
       currentFile: string,
     ) => void;
-    concurrency?: number;
+    useWorkerPool?: boolean;
   },
 ): Promise<FolderScanResult> {
   const scanOptions: FolderScanOptions = {
     recursive: options?.recursive ?? true,
     extensions: SUPPORTED_EXTENSIONS.map((ext) => `.${ext}`),
     onProgress: options?.onProgress,
-    concurrency: options?.concurrency ?? 8, // Higher concurrency for better performance
+    useWorkerPool: options?.useWorkerPool ?? true, // Enable worker pool by default for better performance
     includeProperties: true,
     continueOnError: true,
   };

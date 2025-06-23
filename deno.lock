@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@charlesw/taglib-wasm@*": "0.4.10",
+    "jsr:@charlesw/taglib-wasm@0.5.4": "0.5.4",
     "jsr:@cliffy/command@1.0.0-rc.7": "1.0.0-rc.7",
     "jsr:@cliffy/flags@1.0.0-rc.7": "1.0.0-rc.7",
     "jsr:@cliffy/internal@1.0.0-rc.7": "1.0.0-rc.7",
@@ -21,6 +22,9 @@
   "jsr": {
     "@charlesw/taglib-wasm@0.4.10": {
       "integrity": "a6849c2ffc7d4971de6df491f6c35e8ec66e03872f04e1ebdf7be81a0ae8b515"
+    },
+    "@charlesw/taglib-wasm@0.5.4": {
+      "integrity": "fac0cf6836214d4dbb654561f4ce48c8f17483dd5862b3064f4878e24eccad54"
     },
     "@cliffy/command@1.0.0-rc.7": {
       "integrity": "1288808d7a3cd18b86c24c2f920e47a6d954b7e23cadc35c8cbd78f8be41f0cd",

@@ -4,7 +4,7 @@
  * Prepares the taglib.wasm file for embedding in compiled binaries using JSR package
  */
 
-import { prepareWasmForEmbedding } from "jsr:@charlesw/taglib-wasm";
+import { prepareWasmForEmbedding } from "jsr:@charlesw/taglib-wasm@0.5.4";
 
 const OUTPUT_PATH = "./taglib.wasm";
 
