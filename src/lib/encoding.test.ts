@@ -99,22 +99,12 @@ Deno.test("encodeToM4A - rejects unsupported formats", async () => {
   );
 });
 
-Deno.test("encodeToM4A - dry run logs but doesn't execute", async () => {
-  const originalLog = console.log;
-  let logOutput = "";
-  console.log = (msg: string) => {
-    logOutput += msg + "\n";
-  };
-
-  try {
-    await encodeToM4A("/path/to/file.wav", "/output/file.m4a", {
-      dryRun: true,
-    });
-    assertEquals(
-      logOutput.trim(),
-      "[DRY RUN] Would encode: /path/to/file.wav -> /output/file.m4a",
-    );
-  } finally {
-    console.log = originalLog;
-  }
+Deno.test("encodeToM4A - dry run returns success message", async () => {
+  const result = await encodeToM4A("/path/to/file.wav", "/output/file.m4a", {
+    dryRun: true,
+  });
+  assertEquals(
+    result.success,
+    "[DRY RUN] Would encode: /path/to/file.wav -> /output/file.m4a",
+  );
 });

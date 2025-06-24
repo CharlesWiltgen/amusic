@@ -13,11 +13,16 @@ export interface EncodingOptions {
   outputDirectory?: string;
 }
 
+export interface EncodingResult {
+  metadataInfo?: string;
+  success?: string;
+}
+
 export async function encodeToM4A(
   inputPath: string,
   outputPath: string,
   options: EncodingOptions = {},
-): Promise<void> {
+): Promise<EncodingResult> {
   const ext = extname(inputPath).toLowerCase().slice(1);
 
   // Check if input format is allowed
@@ -34,8 +39,9 @@ export async function encodeToM4A(
   }
 
   if (options.dryRun) {
-    console.log(`[DRY RUN] Would encode: ${inputPath} -> ${outputPath}`);
-    return;
+    return {
+      success: `[DRY RUN] Would encode: ${inputPath} -> ${outputPath}`,
+    };
   }
 
   // Use afconvert for encoding
@@ -69,14 +75,15 @@ export async function encodeToM4A(
 
   // Copy metadata from source to destination
   try {
-    await copyMetadata(inputPath, outputPath);
+    const metadataResult = await copyMetadata(inputPath, outputPath);
+    return metadataResult;
   } catch (error) {
-    // Log but don't fail if metadata copy fails
-    console.error(
-      `Warning: Failed to copy metadata: ${
+    // Return warning but don't fail if metadata copy fails
+    return {
+      metadataInfo: `⚠️  Warning: Failed to copy metadata: ${
         error instanceof Error ? error.message : String(error)
       }`,
-    );
+    };
   }
 }
 
@@ -225,27 +232,25 @@ function applyBasicMetadata(destTag: any, metadata: any) {
 }
 
 /**
- * Filter properties that should be copied
+ * Filter properties that should be copied based on target format
  */
 function filterPropertiesToCopy(
   allProperties: Record<string, string[]>,
+  _targetPath: string,
 ): Record<string, string[]> {
+  // Properties that are handled separately or shouldn't be copied
   const skipProperties = [
-    "TITLE",
-    "ARTIST",
-    "ALBUM",
-    "DATE",
-    "TRACKNUMBER",
-    "GENRE",
-    "COMMENT",
-    "COVERART",
-    "METADATA_BLOCK_PICTURE",
-    "APIC",
-    "PIC",
+    // Audio properties that are format-specific
     "LENGTH",
     "BITRATE",
     "SAMPLERATE",
     "CHANNELS",
+    "CODEC",
+    // Cover art - handled separately
+    "COVERART",
+    "METADATA_BLOCK_PICTURE",
+    "APIC",
+    "PIC",
   ];
 
   const propertiesToCopy: Record<string, string[]> = {};
@@ -261,26 +266,41 @@ function filterPropertiesToCopy(
 }
 
 /**
- * Copy cover art from source to destination file
+ * Format metadata copy information
  */
-// deno-lint-ignore no-explicit-any
-function copyCoverArt(sourceFile: any, destFile: any): number {
-  const pictures = sourceFile.getPictures();
-  if (!pictures || pictures.length === 0) {
-    return 0;
+function formatMetadataInfo(
+  propertyCount: number,
+  pictureCount: number,
+): string {
+  let metadataInfo = `ℹ️ Copying metadata: ${propertyCount} tags`;
+  if (pictureCount > 0) {
+    if (pictureCount === 1) {
+      metadataInfo += " (including cover art)";
+    } else {
+      metadataInfo += ` (including ${pictureCount} images)`;
+    }
   }
+  return metadataInfo;
+}
+
+/**
+ * Copy cover art with error handling
+ */
+function copyCoverArtSafe(
+  // deno-lint-ignore no-explicit-any
+  pictures: any[] | undefined,
+  // deno-lint-ignore no-explicit-any
+  destFile: any,
+): string | undefined {
+  if (!pictures || pictures.length === 0) return undefined;
 
   try {
     destFile.setPictures(pictures);
-    console.log(`   Copied ${pictures.length} cover art image(s)`);
-    return pictures.length;
+    return undefined;
   } catch (error) {
-    console.log(
-      `   Warning: Failed to copy ${pictures.length} cover art image(s): ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return 0;
+    return `⚠️  Warning: Failed to copy ${pictures.length} cover art image(s): ${
+      error instanceof Error ? error.message : String(error)
+    }`;
   }
 }
 
@@ -291,83 +311,73 @@ function copyCoverArt(sourceFile: any, destFile: any): number {
 async function copyMetadata(
   sourcePath: string,
   destPath: string,
-): Promise<void> {
+): Promise<EncodingResult> {
   const taglib = await ensureTagLib();
   let sourceFile = null;
   let destFile = null;
 
   try {
-    // Read source file
-    const sourceData = await Deno.readFile(sourcePath);
-    sourceFile = await taglib.open(sourceData);
+    // Read both files in parallel for better performance
+    const [sourceData, destData] = await Promise.all([
+      Deno.readFile(sourcePath),
+      Deno.readFile(destPath),
+    ]);
 
+    // Open both files
+    sourceFile = await taglib.open(sourceData);
     if (!sourceFile) {
       throw new Error("Failed to open source file");
     }
 
-    // Get basic metadata
-    const sourceTag = sourceFile.tag();
-    const basicMetadata = extractBasicMetadata(sourceTag);
-
-    // Get ALL metadata using properties() method
-    // Note: properties() returns the complete property map
-    const allProperties = sourceFile.properties() || {};
-
-    // Count properties for logging
-    const propertyCount = Object.keys(allProperties).length;
-    const basicCount = Object.values(basicMetadata).filter((v) =>
-      v !== undefined && v !== null
-    ).length;
-    console.log(
-      `   Copying metadata: ${basicCount} basic properties, ${propertyCount} total properties found`,
-    );
-
-    // Get cover art separately (still needed as PropertyMap doesn't handle pictures)
-    // This will be copied later after destination file is open
-
-    // Now open destination file
-    const destData = await Deno.readFile(destPath);
     destFile = await taglib.open(destData);
-
     if (!destFile) {
       throw new Error("Failed to open destination file");
     }
 
-    // Copy basic metadata first (for compatibility)
+    // Get all metadata from source
+    const sourceTag = sourceFile.tag();
+    const basicMetadata = extractBasicMetadata(sourceTag);
+    const allProperties = sourceFile.properties() ?? {};
+    const pictures = sourceFile.getPictures();
+
+    // Format what we're copying
+    const propertyCount = Object.keys(allProperties).length;
+    const pictureCount = pictures?.length ?? 0;
+    const metadataInfo = formatMetadataInfo(propertyCount, pictureCount);
+
+    // Apply everything to destination
     const destTag = destFile.tag();
+
+    // 1. Copy basic metadata
     applyBasicMetadata(destTag, basicMetadata);
 
-    // Copy ALL properties using setPropertyMap()
-    const propertiesToCopy = filterPropertiesToCopy(allProperties);
-
-    // Copy all filtered properties at once
+    // 2. Copy all extended properties
+    const propertiesToCopy = filterPropertiesToCopy(allProperties, destPath);
     if (Object.keys(propertiesToCopy).length > 0) {
-      // Set properties directly on the file
       destFile.setProperties(propertiesToCopy);
     }
 
-    // Add encoder information
+    // 3. Copy cover art
+    const coverArtWarning = copyCoverArtSafe(pictures, destFile);
+
+    // 4. Add encoder information
     const encoderInfo = `Encoded with amusic v${VERSION} (taglib-wasm)`;
     const existingComment = destTag.comment;
     destTag.setComment(
       existingComment ? `${existingComment}\n${encoderInfo}` : encoderInfo,
     );
 
-    // Handle cover art
-    const pictureCount = copyCoverArt(sourceFile, destFile);
-
-    // Save the destination file
+    // Save everything in one write operation
     destFile.save();
     const updatedData = destFile.getFileBuffer();
     await Deno.writeFile(destPath, new Uint8Array(updatedData));
 
-    console.log(
-      `Successfully copied ${
-        Object.keys(allProperties).length
-      } metadata properties${
-        pictureCount > 0 ? ` and ${pictureCount} cover art image(s)` : ""
-      }`,
-    );
+    return {
+      metadataInfo: coverArtWarning
+        ? `${metadataInfo}\n   ${coverArtWarning}`
+        : metadataInfo,
+      success: "Successfully copied all metadata",
+    };
   } finally {
     if (sourceFile) sourceFile.dispose();
     if (destFile) destFile.dispose();
